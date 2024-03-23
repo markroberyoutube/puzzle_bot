@@ -1,2 +1,2 @@
-# puzzle_bot
+# Puzzle Bot
 Robot that solves jigsaw puzzles
