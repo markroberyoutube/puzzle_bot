@@ -53,16 +53,20 @@
 
 #include "ClearCore.h"
 
+<<<<<<< HEAD
 // When true, will print debug statements to the serial port
 const bool debug = false;
 
 // Define which connector the software-based E-Stop is connected to
 // Connectors that support digital interrupts are:
 // DI-6, DI-7, DI-8, A-9, A-10, A-11, A-12
+=======
+// Define which pin and connector the software-based E-Stop is connected to.
+// This will use the new EStop functionality in the ClearCore
+>>>>>>> fc65b3a (Soft e-stop fixes)
 #define softStopConnector ConnectorDI6
+#define softStopPin CLEARCORE_PIN_DI6
 bool softStopped = false;
-char *softStopEngagedMessage = "STOP: Soft Stop Engaged";
-char *softStopReleasedMessage = "GO: Soft Stop Released";
 
 // Select the baud rate to match the target serial device
 const unsigned long baudRate = 9600;
@@ -110,7 +114,7 @@ const int maxZ = 150000;
 // your system will not enter an unsafe state.
 // To enable automatic alert clearing, set alwaysClearAlerts = true
 // To disable automatic alert clearing, set alwaysClearAlerts = false
-const bool alwaysClearAlerts = true;
+const bool alwaysClearAlerts = false;
 
 
 /*------------------------------------------------------------------------------
@@ -190,6 +194,7 @@ void setup() {
     
     // Set the ISR's to be called when the SoftStop button is hit or released.
     // Initially turn the interrupts on (third argument 'true')
+<<<<<<< HEAD
     softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
     
     softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
@@ -208,6 +213,22 @@ void setup() {
       Serial.print("softStopped: ");
       Serial.println(softStopped);
     }
+=======
+    //softStopConnector.InterruptHandlerSet(softStopEngaged, InputManager::FALLING, true);
+    //softStopConnector.InterruptHandlerSet(softStopReleased, InputManager::RISING, true);
+    
+    // Set up the soft e-stop on all motors
+    motorX.EStopConnector(softStopPin);
+    motorY1.EStopConnector(softStopPin);
+    motorY2.EStopConnector(softStopPin);
+    motorZ.EStopConnector(softStopPin);
+    
+    // // Read the Soft Stop button's initial state, and let user know if it's pressed
+    // if (!softStopConnector.State()) { // if input state is LOW
+    //     // The soft stop button is pressed. Process this.
+    //     softStopped = true;
+    // }
+>>>>>>> fc65b3a (Soft e-stop fixes)
     
     // Configure connector 1 to be a digital output that controls the vacuum valve
     ConnectorIO1.Mode(Connector::OUTPUT_DIGITAL);
@@ -496,6 +517,28 @@ void clearAlerts(MotorDriver *motor) {
  *   False otherwise.
  */
 bool processAlerts(MotorDriver *motor) {
+    // If the soft e-stop has recently been pressed, process it
+    if (debug) {Serial.println("Checking soft e-stop");}
+    if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
+        if (debug) {Serial.println("Soft e-stop alert is present");}
+        // If the soft e-stop has just been released, cancel this alert
+        if (softStopConnector.State()) {
+            if (debug) {Serial.println("Soft e-stop recently released. Clearing alert.");}
+            clearAlerts(motor);
+            softStopped = false;
+        }
+        
+        // If we are noticing this for the first time, print an error message
+        // to indicate the command was cancelled or not successful
+        if (softStopped == false) {
+            softStopped = true;
+            Serial.println("STOP: Soft Stop Engaged");
+        }
+        
+        // We are soft stopped. Return false indicating the command was not successful
+        return false;
+    }    
+    
     // Check if a motor alert is currently preventing motion
     if (motor->StatusReg().bit.AlertsPresent) {
         // Clear alert if configured to do so
