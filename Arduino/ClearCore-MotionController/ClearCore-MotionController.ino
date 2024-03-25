@@ -53,6 +53,9 @@
 
 #include "ClearCore.h"
 
+// When true, will print debug statements to the serial port
+const bool debug = false;
+
 // Define which connector the software-based E-Stop is connected to
 // Connectors that support digital interrupts are:
 // DI-6, DI-7, DI-8, A-9, A-10, A-11, A-12
@@ -176,7 +179,9 @@ void setup() {
     // Start serial communication and wait for it to open properly before continuing
     Serial.begin(baudRate);
     while (!Serial) {}
-    
+
+    if (debug) {Serial.println("Setup has begun");}
+
     // Set up the interrupt connector in digital input mode.
     // NOTE: The ClearCore manual clearly shows a pull-up resistor is always present,
     // and the "soft stop" is connected between ground and the I/O pin, so it's normally
@@ -185,18 +190,28 @@ void setup() {
     
     // Set the ISR's to be called when the SoftStop button is hit or released.
     // Initially turn the interrupts on (third argument 'true')
-    softStopConnector.InterruptHandlerSet(softStopEngaged, InputManager::FALLING, true);
-    softStopConnector.InterruptHandlerSet(softStopReleased, InputManager::RISING, true);
+    softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
     
-    // Read the Soft Stop button's initial state, and let user know if it's pressed
-    if (!softStopConnector.State()) { // if input state is LOW
+    softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
+    
+    // Read the Soft Stop button's initial state
+    // Although the line is active LOW due to a pull-up resistor, it seems ClearCore either 
+    // in hardware (with an inverter) or in software (in their firmware API) are inverting
+    // that notion - probably to make it easier on developers. So the API responds as if it
+    // is active HIGH. The ISR though triggers active LOW. How odd.
+    if (softStopConnector.State()) { // if input state is LOW
         // The soft stop button is pressed. Process this.
         softStopped = true;
+    }
+
+    if (debug) {
+      Serial.print("softStopped: ");
+      Serial.println(softStopped);
     }
     
     // Configure connector 1 to be a digital output that controls the vacuum valve
     ConnectorIO1.Mode(Connector::OUTPUT_DIGITAL);
-    vacuumOff(); // ensure the vacuum is off during startup
+    vacuumOn(); // ensure the vacuum is ON during startup
 
     // Set the input clocking rate. This normal rate is ideal for ClearPath step and direction applications.
     MotorMgr.MotorInputClocking(MotorManager::CLOCK_RATE_NORMAL);
@@ -232,6 +247,8 @@ void setup() {
         // Check if motor alert occurred during enabling, and clear alerts if configured to do so
         if (!processAlerts(motor)) {} // take no action on return value at this time.
     }
+
+    if (debug) {Serial.println("Startup finished");}
 }
 
 
@@ -253,7 +270,7 @@ void loop() {
         // get the command (a single letter)
         command = readChar(); 
         // if the command is not a letter, skip it (could be a framing issue)
-        if (!isAlpha(command)) {
+        if (!isAlphaNumeric(command)) {
             Serial.print("ERROR: Invalid command: ");
             Serial.println(command);
             return;
@@ -279,6 +296,12 @@ void processCommand(char command) {
     int32_t xPos = 0;
     int32_t yPos = 0;
     int32_t zPos = 0;
+
+    if (debug) {
+      Serial.print("processCommand: ");
+      Serial.println(command);
+    }
+
     switch (command) {
         case 's': // jog -y
             if (!softStopped) { moveRelativeY(-jogDistanceY); }
@@ -296,12 +319,12 @@ void processCommand(char command) {
             if (!softStopped) { moveRelativeX(jogDistanceX); }
             break;
             
-        case 'o': // jog -z
-            if (!softStopped) { moveRelativeZ(-jogDistanceZ); }
+        case 'o': // jog z
+            if (!softStopped) { moveRelativeZ(jogDistanceZ); }
             break;
             
-        case 'l': // jog +z
-            if (!softStopped) { moveRelativeZ(jogDistanceZ); }
+        case 'l': // jog -z
+            if (!softStopped) { moveRelativeZ(-jogDistanceZ); }
             break;
             
         case 'h': // perform homing routine
@@ -331,11 +354,21 @@ void processCommand(char command) {
             break;
     
         case '0': // turn vacuum off
-            if (!softStopped) { vacuumOff(); }
+            if (!softStopped) { 
+              vacuumOff();
+              Serial.println("SUCCESS: vacuumOff");
+            }
             break;
 
         case '1': // turn vacuum on
-            if (!softStopped) { vacuumOn(); }
+            if (!softStopped) { 
+              vacuumOn();
+              Serial.println("SUCCESS: vacuumOn"); 
+            }
+            break;
+
+        case 'p': // print current position
+            if (!softStopped) { printCurrentPosXYZ(); }
             break;
 
         default:
@@ -467,6 +500,7 @@ bool processAlerts(MotorDriver *motor) {
     if (motor->StatusReg().bit.AlertsPresent) {
         // Clear alert if configured to do so
         if (alwaysClearAlerts) {
+            if (debug) {Serial.println("Alert present. Automatically clearing it.");}
             clearAlerts(motor);
         }
         else {
@@ -583,14 +617,19 @@ bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
 void waitForMoveToComplete(MotorDriver *motor) {
     // Wait for HLFB to assert (signaling the move has successfully completed)
     // OR for an alert to be set
+    if (debug) {Serial.println("Waiting for move to complete...");}
+    
     while ((!motor->StepsComplete() && \
             motor->HlfbState() != MotorDriver::HLFB_ASSERTED) && \
             !motor->StatusReg().bit.AlertsPresent) {
         continue;
     }
+
+    if (debug) {Serial.println("Checking to see if alerts are present.");}
     
     // Stop all motors if there was an alert
     if (motor->StatusReg().bit.AlertsPresent) {
+        if (debug) {Serial.println("Alert was present. Stopping all motors.");}
         stopAllMotors();
     }
 }
@@ -698,6 +737,7 @@ void enableAllMotors() {
 }
 
 void homeAllAxes() {
+
     if ( (home1Axis(8000, &motorX)) && \
          (home2Axis(8000, &motorY1, -8000, &motorY2)) && \
          (home1Axis(8000, &motorZ)) ) {
@@ -723,9 +763,9 @@ bool home1Axis(int32_t velocity, MotorDriver *motor) {
     }
     
     // Delay so HLFB has time to deassert
-    Delay_ms(10);
+    Delay_ms(100);
     
-    // Waits for HLFB to assert again on both motors, meaning the hardstop has been reached
+    // Waits for HLFB to assert on the motors, meaning the hardstop has been reached
     while (motor->HlfbState() != MotorDriver::HLFB_ASSERTED) {
         // Check if a motor alert occurred so far, and clear alerts if configured to do so
         if (!processAlerts(motor)) {
@@ -734,7 +774,7 @@ bool home1Axis(int32_t velocity, MotorDriver *motor) {
             return false;
         }
     }
-    
+
     // Stop the velocity move now that the hardstop is reached
     motor->MoveStopAbrupt();
     Delay_ms(1000);
@@ -790,7 +830,7 @@ bool home2Axis(int32_t velocity1, MotorDriver *m1, int32_t velocity2, MotorDrive
     }
     
     // Delay so HLFB has time to deassert
-    Delay_ms(10);
+    Delay_ms(100);
     
     // Waits for HLFB to assert again on both motors, meaning the hardstops have been reached
     while ((m1->HlfbState() != MotorDriver::HLFB_ASSERTED) || (m2->HlfbState() != MotorDriver::HLFB_ASSERTED)) {
@@ -800,6 +840,13 @@ bool home2Axis(int32_t velocity1, MotorDriver *m1, int32_t velocity2, MotorDrive
             stopAllMotors();
             return false;
         }
+    }
+
+    if (debug) {
+      Serial.print("m1 HLFB State: ");
+      Serial.print(m1->HlfbState());
+      Serial.print(" and m2 HLFB State: ");
+      Serial.println(m2->HlfbState());
     }
     
     // Stop the velocity move now that the hardstop is reached
