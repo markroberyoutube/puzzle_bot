@@ -61,6 +61,9 @@ const bool debug = false;
 #define softStopPin CLEARCORE_PIN_DI6
 bool softStopped = false;
 
+// Keep track of whether the e-stop has been hit
+bool eStopped = false;
+
 // Select the baud rate to match the target serial device
 const unsigned long baudRate = 9600;
 
@@ -165,6 +168,7 @@ void vacuumOn();
 
 bool softStopIsPressed();
 bool processSoftStop();
+bool processEStop();
 
 
 /*------------------------------------------------------------------------------
@@ -276,8 +280,9 @@ void setup() {
 void loop() {
   char command;
 
-  // Check for soft stop
+  // Check for soft stop and hard e-stop
   processSoftStop();
+  processEStop();
 
   // If a serial command has arrived, process it.
   if (Serial.available()) {
@@ -316,8 +321,9 @@ void processCommand(char command) {
     Serial.println(command);
   }
 
-  // Check state of soft estop
+  // Check state of soft estop and hard estop
   processSoftStop();
+  processEStop();
 
   switch (command) {
     case 's':  // jog -y
@@ -493,6 +499,52 @@ bool softStopIsPressed() {
   return (!softStopConnector.State());
 }
 
+bool processEStop() {
+  // If one of the motors had a MotorFaulted alert, a main cause is someone hitting the E-Stop
+
+  bool alertWasCleared = false;
+
+  // Check each motor for a soft EStop alert, and process it if found
+  MotorDriver *motor;
+  for (uint8_t i = 0; i < motorCount; i++) {
+    motor = motors[i];
+    // If the E-Stop has been recently pressed,
+    if (motor->AlertReg().bit.MotorFaulted) {
+      // AND the motor is now active again
+      if (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) {
+        // THEN clear the fault
+        clearAlerts(motor);
+        alertWasCleared = true;
+      }
+      else {
+        // If E-Stop was *just* pressed, record it and return false to signal the command did not complete successfully
+        if (!eStopped) {
+          eStopped = true;
+          Serial.println("STOP: E-Stop was engaged");
+        }
+      }
+    }
+  }
+
+  if (alertWasCleared) {
+    eStopped = false;
+    Serial.println("GO: E-Stop was released");
+    // Make SURE all the motor alerts had a chance to clear
+    Delay_ms(1000);
+    for (uint8_t i = 0; i < motorCount; i++) {
+      motor = motors[i];
+      clearAlerts(motor);
+    }
+  }
+
+  if (eStopped) {
+    return false;
+  }
+
+  return true;
+
+}
+
 
 /*------------------------------------------------------------------------------
  * printAlerts
@@ -572,6 +624,9 @@ void clearAlerts(MotorDriver *motor) {
 bool processAlerts(MotorDriver *motor) {
   // If the soft e-stop is pressed, return false indicating the command was not successful
   if (!processSoftStop()) { return false; }
+
+  // If the hard e-stop is pressed, return false indicating the command was not successful
+  if (!processEStop()) { return false; }
 
   // Check if a motor alert is currently preventing motion
   if (motor->StatusReg().bit.AlertsPresent) {
@@ -697,14 +752,24 @@ void waitForMoveToComplete(MotorDriver *motor) {
   // the machine will start decelerating. During that time, case StepsComplete will be false
   // (it will get set to true only after the decel is finished) and the estop alert will not yet be set (it gets set only after the decel is finished).
   // So one way we can detect this is because during decel, the motor's HlfbState() will be HLFB_HAS_MEASUREMENT.
+  // ALSO there's the issue of the hard stop. When it's pressed, StepsComplete will be true, HLFB will be deasserted, and AlertsPresent will be true
   // So we want to wait for either of the following cases to be true before we return:
   //   Motor finished move, all good: (StepsComplete==true), HLFB Asserted, and No Alerts Present
   //   Soft stop was hit, motor finished decel: (StepsComplete==true), HLFB is Asserted, Alert is Set
+  //   E-Stop was hit: (StepsComplete==true), HLFB is Deasserted, Alert is Set
   //   Some other alert was raised: (StepsComplete==false), HLFB is Asserted, Alert is Set
   while (true) {
     if ((motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (!motor->StatusReg().bit.AlertsPresent)) { break; }
     if ((motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (motor->StatusReg().bit.AlertsPresent)) { break; }
+    if ((motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_DEASSERTED) && (motor->StatusReg().bit.AlertsPresent)) { break; }
     if ((motor->StepsComplete() == false) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (motor->StatusReg().bit.AlertsPresent)) { break; }
+
+    //Serial.print("StepsComplete: ");
+    //Serial.print(motor->StepsComplete());
+    //Serial.print(", HLFB: ");
+    //Serial.print(motor->HlfbState());
+    //Serial.print(", AlertsPresent: ");
+    //Serial.println(motor->StatusReg().bit.AlertsPresent);
   }
 
   if (debug) { Serial.println("Checking to see if alerts are present."); }
@@ -920,7 +985,7 @@ bool home2Axis(int32_t velocity1, MotorDriver *m1, int32_t velocity2, MotorDrive
     return false;
   }
 
-  // Delay so HLFB has time to deassert
+  // Delay so HLFB has time to de-assert
   Delay_ms(100);
 
   // Waits for HLFB to assert again on both motors, meaning the hardstops have been reached
