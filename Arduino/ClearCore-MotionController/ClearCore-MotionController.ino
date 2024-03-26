@@ -53,17 +53,10 @@
 
 #include "ClearCore.h"
 
-<<<<<<< HEAD
 // When true, will print debug statements to the serial port
-const bool debug = false;
+const bool debug = true;
 
-// Define which connector the software-based E-Stop is connected to
-// Connectors that support digital interrupts are:
-// DI-6, DI-7, DI-8, A-9, A-10, A-11, A-12
-=======
-// Define which pin and connector the software-based E-Stop is connected to.
-// This will use the new EStop functionality in the ClearCore
->>>>>>> fc65b3a (Soft e-stop fixes)
+// Define which connector and pin the soft estop will use
 #define softStopConnector ConnectorDI6
 #define softStopPin CLEARCORE_PIN_DI6
 bool softStopped = false;
@@ -166,6 +159,9 @@ char readChar();
 void vacuumOff();
 void vacuumOn();
 
+bool softStopIsPressed();
+bool processSoftStop();
+
 
 /*------------------------------------------------------------------------------
  * setup
@@ -194,18 +190,15 @@ void setup() {
     
     // Set the ISR's to be called when the SoftStop button is hit or released.
     // Initially turn the interrupts on (third argument 'true')
-<<<<<<< HEAD
-    softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
-    
-    softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
+    //softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
+    //softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
     
     // Read the Soft Stop button's initial state
     // Although the line is active LOW due to a pull-up resistor, it seems ClearCore either 
     // in hardware (with an inverter) or in software (in their firmware API) are inverting
     // that notion - probably to make it easier on developers. So the API responds as if it
     // is active HIGH. The ISR though triggers active LOW. How odd.
-    if (softStopConnector.State()) { // if input state is LOW
-        // The soft stop button is pressed. Process this.
+    if (softStopIsPressed()) {
         softStopped = true;
     }
 
@@ -213,23 +206,13 @@ void setup() {
       Serial.print("softStopped: ");
       Serial.println(softStopped);
     }
-=======
-    //softStopConnector.InterruptHandlerSet(softStopEngaged, InputManager::FALLING, true);
-    //softStopConnector.InterruptHandlerSet(softStopReleased, InputManager::RISING, true);
-    
+
     // Set up the soft e-stop on all motors
     motorX.EStopConnector(softStopPin);
     motorY1.EStopConnector(softStopPin);
     motorY2.EStopConnector(softStopPin);
     motorZ.EStopConnector(softStopPin);
-    
-    // // Read the Soft Stop button's initial state, and let user know if it's pressed
-    // if (!softStopConnector.State()) { // if input state is LOW
-    //     // The soft stop button is pressed. Process this.
-    //     softStopped = true;
-    // }
->>>>>>> fc65b3a (Soft e-stop fixes)
-    
+        
     // Configure connector 1 to be a digital output that controls the vacuum valve
     ConnectorIO1.Mode(Connector::OUTPUT_DIGITAL);
     vacuumOn(); // ensure the vacuum is ON during startup
@@ -265,8 +248,10 @@ void setup() {
           continue;
         }
         
-        // Check if motor alert occurred during enabling, and clear alerts if configured to do so
-        if (!processAlerts(motor)) {} // take no action on return value at this time.
+        // Check if motor alert occurred during enabling, and clear alert if present
+        if (!processAlerts(motor)) {
+          clearAlerts(motor);
+        } 
     }
 
     if (debug) {Serial.println("Startup finished");}
@@ -322,6 +307,9 @@ void processCommand(char command) {
       Serial.print("processCommand: ");
       Serial.println(command);
     }
+
+    // Check state of soft estop
+    processSoftStop();
 
     switch (command) {
         case 's': // jog -y
@@ -442,6 +430,57 @@ int32_t readInt() {
 
 
 /*------------------------------------------------------------------------------
+ * processSoftStop
+ *
+ *   If the soft stop was just engaged, set global softStopped=true and print a "STOP" message to the serial port
+ *   If the soft stop was just released, set global softStopped=false and print a "GO" message to the serial port
+ *
+ * Parameters:
+ *   none
+ *
+ * Returns: 
+ *   true if the soft stop is currently not engaged
+ *   false if the soft stop is currently engaged
+ */
+bool processSoftStop() {
+  MotorDriver *motor;
+  bool softStopCurrentlyPressed = softStopIsPressed();
+  bool softStopAlertsWereCleared = false;
+
+  // If the soft e-stop was just pressed, return false to indicate the issue
+  if (softStopCurrentlyPressed && !softStopped) {
+    softStopped = true;
+    Serial.println("STOP: Soft E-Stop Engaged");
+    return false;
+  }
+
+  // Check each motor for a soft EStop alert, and process it if found
+  for (uint8_t i = 0; i < motorCount; i++) {
+      motor = motors[i];
+      if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
+        // If the soft estop has been released, clear the alert and set the global softStopped to false
+        if (!softStopCurrentlyPressed) {
+          clearAlerts(motor);
+          softStopped = false;
+          Delay_ms(10); // Delay to wait for alert to fully clear
+          softStopAlertsWereCleared = true;
+        }
+      }
+  }
+  // If we detected the Soft E-Stop was released, print that to the serial port
+  if (softStopAlertsWereCleared) {
+    Serial.println("GO: Soft E-Stop Released");
+  }
+
+  return true;
+}
+
+bool softStopIsPressed() {
+  return (!softStopConnector.State());
+}
+
+
+/*------------------------------------------------------------------------------
  * printAlerts
  *
  *   Prints active alerts to the serial port as an error message
@@ -517,27 +556,8 @@ void clearAlerts(MotorDriver *motor) {
  *   False otherwise.
  */
 bool processAlerts(MotorDriver *motor) {
-    // If the soft e-stop has recently been pressed, process it
-    if (debug) {Serial.println("Checking soft e-stop");}
-    if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
-        if (debug) {Serial.println("Soft e-stop alert is present");}
-        // If the soft e-stop has just been released, cancel this alert
-        if (softStopConnector.State()) {
-            if (debug) {Serial.println("Soft e-stop recently released. Clearing alert.");}
-            clearAlerts(motor);
-            softStopped = false;
-        }
-        
-        // If we are noticing this for the first time, print an error message
-        // to indicate the command was cancelled or not successful
-        if (softStopped == false) {
-            softStopped = true;
-            Serial.println("STOP: Soft Stop Engaged");
-        }
-        
-        // We are soft stopped. Return false indicating the command was not successful
-        return false;
-    }    
+    // If the soft e-stop is pressed, return false indicating the command was not successful 
+    if (!processSoftStop()) {return false;}
     
     // Check if a motor alert is currently preventing motion
     if (motor->StatusReg().bit.AlertsPresent) {
@@ -635,6 +655,49 @@ bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
     if (m3 != NULL) { waitForMoveToComplete(m3); }
     if (m4 != NULL) { waitForMoveToComplete(m4); }
     
+    // If the soft estop was pressed in the middle of the move, at this point
+    // the machine MAY be decelerating. In that case StepsComplete will be false 
+    // (it will get set to true after the decel is finished)
+    // Another possibility is that the soft estop was pressed just as the machine
+    // was finishing the move, in which case StepsComplete will be true but AlertsPresent will also be true.
+    
+    //Serial.print("HLFB_DEASSERTED ");
+    //Serial.println(MotorDriver::HLFB_DEASSERTED);
+    //Serial.print("HLFB_ASSERTED ");
+    //Serial.println(MotorDriver::HLFB_ASSERTED);
+    //Serial.print("HLFB_HAS_MEASUREMENT ");
+    //Serial.println(MotorDriver::HLFB_HAS_MEASUREMENT);
+    //Serial.print("HLFB_UNKNOWN ");
+    //Serial.println(MotorDriver::HLFB_UNKNOWN);
+
+    // Delay to allow any alerts to appear
+    // if (debug) {
+    //   Serial.print("BEFORE DELAY: StepsComplete ");
+    //   Serial.print(m1->StepsComplete());
+    //   Serial.print(", HlfbState ");
+    //   Serial.print(m1->HlfbState());
+    //   Serial.print(", AlertsPresent ");
+    //   Serial.println(m1->StatusReg().bit.AlertsPresent);
+    // }
+    // Delay_ms(100);
+    // if (debug) {
+    //   Serial.print("AFTER DELAY: StepsComplete ");
+    //   Serial.print(m1->StepsComplete());
+    //   Serial.print(", HlfbState ");
+    //   Serial.print(m1->HlfbState());
+    //   Serial.print(", AlertsPresent ");
+    //   Serial.println(m1->StatusReg().bit.AlertsPresent); 
+    // }
+    // Delay_ms(5000);
+    // if (debug) {
+    //   Serial.print("AFTER 2nd DELAY: StepsComplete ");
+    //   Serial.print(m1->StepsComplete());
+    //   Serial.print(", HlfbState ");
+    //   Serial.print(m1->HlfbState());
+    //   Serial.print(", AlertsPresent ");
+    //   Serial.println(m1->StatusReg().bit.AlertsPresent); 
+    // }
+
     // Process any alerts, returning false if there are alerts that weren't auto-cleared
     if ( (m1 != NULL) && !processAlerts(m1) ) {return false;}
     if ( (m2 != NULL) && !processAlerts(m2) ) {return false;}
@@ -658,21 +721,31 @@ bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
  *   none
  */
 void waitForMoveToComplete(MotorDriver *motor) {
-    // Wait for HLFB to assert (signaling the move has successfully completed)
-    // OR for an alert to be set
+    // Wait for the move to finish or an alert to be set
     if (debug) {Serial.println("Waiting for move to complete...");}
     
-    while ((!motor->StepsComplete() && \
-            motor->HlfbState() != MotorDriver::HLFB_ASSERTED) && \
-            !motor->StatusReg().bit.AlertsPresent) {
-        continue;
+    // If the soft estop was pressed in the middle of the move, at that point
+    // the machine will start decelerating. During that time, case StepsComplete will be false 
+    // (it will get set to true only after the decel is finished) and the estop alert will not yet be set (it gets set only after the decel is finished).
+    // So one way we can detect this is because during decel, the motor's HlfbState() will be HLFB_HAS_MEASUREMENT.
+    // So we want to wait for either of the following cases to be true before we return:
+    //   Motor finished move (StepsComplete==true), HLFB Asserted, and No Alerts Present (normal case, all is good!)
+    //   Motor didn't finish move (StepsComplete==false), but an Alert is Set (error! some alert was set. might be e-stop)
+    //while ((!motor->StepsComplete() && \
+    //        motor->HlfbState() == MotorDriver::HLFB_DEASSERTED) && \
+    //        !motor->StatusReg().bit.AlertsPresent) {
+    //    continue;
+    //}
+    while (true) {
+      if ( (motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (!motor->StatusReg().bit.AlertsPresent) ) {break;}
+      if ( (motor->StepsComplete() == false) && (motor->StatusReg().bit.AlertsPresent) ) {break;}
     }
 
     if (debug) {Serial.println("Checking to see if alerts are present.");}
     
     // Stop all motors if there was an alert
     if (motor->StatusReg().bit.AlertsPresent) {
-        if (debug) {Serial.println("Alert was present. Stopping all motors.");}
+        if (debug) {Serial.println("Alert was present. Stopping all motors."); printAlerts(motor);}
         stopAllMotors();
     }
 }
@@ -714,45 +787,6 @@ void moveAbsoluteXYZ(int32_t posX, int32_t posY, int32_t posZ) {
     if (move4Axis(-posX, &motorX, -posY, &motorY1, posY, &motorY2, posZ, &motorZ, true)) {
         Serial.println("SUCCESS: moveAbsoluteXYZ");
     }
-}
-
-
-/*------------------------------------------------------------------------------
- * softStopEngaged
- *
- *   ISR to call when soft stop button is pressed.
- *   Stops and disables all motors, sends the "STOP" message over the serial port
- *
- * Parameters:
- *   none
- *
- * Returns: 
- *   none
- */
-void softStopEngaged() {
-    softStopped = true;
-    stopAllMotors();
-    disableAllMotors();
-    Serial.println(softStopEngagedMessage);
-}
-
-
-/*------------------------------------------------------------------------------
- * softStopReleased
- *
- *   ISR to call when soft stop button is released.
- *   Enables all motors, sends the "GO" message over the serial port
- *
- * Parameters:
- *   none
- *
- * Returns: 
- *   none
- */
-void softStopReleased() {
-    softStopped = false;
-    enableAllMotors();
-    Serial.println(softStopReleasedMessage);
 }
 
 void stopAllMotors() {
@@ -883,13 +917,6 @@ bool home2Axis(int32_t velocity1, MotorDriver *m1, int32_t velocity2, MotorDrive
             stopAllMotors();
             return false;
         }
-    }
-
-    if (debug) {
-      Serial.print("m1 HLFB State: ");
-      Serial.print(m1->HlfbState());
-      Serial.print(" and m2 HLFB State: ");
-      Serial.println(m2->HlfbState());
     }
     
     // Stop the velocity move now that the hardstop is reached
