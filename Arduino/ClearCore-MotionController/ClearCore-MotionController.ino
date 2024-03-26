@@ -54,7 +54,7 @@
 #include "ClearCore.h"
 
 // When true, will print debug statements to the serial port
-const bool debug = true;
+const bool debug = false;
 
 // Define which connector and pin the soft estop will use
 #define softStopConnector ConnectorDI6
@@ -69,7 +69,7 @@ const unsigned long baudRate = 9600;
 #define motorY1 ConnectorM1
 #define motorY2 ConnectorM2
 #define motorZ ConnectorM3
-MotorDriver *motors[] = {&motorX, &motorY1, &motorY2, &motorZ};
+MotorDriver *motors[] = { &motorX, &motorY1, &motorY2, &motorZ };
 const uint8_t motorCount = 4;
 
 // Specify how many motor counts per inch and mm for X and Y
@@ -97,7 +97,7 @@ const int maxX = 397000;
 const int minY = 0;
 const int maxY = 800000;
 const int minZ = 0;
-const int maxZ = 150000;
+const int maxZ = 136000;  //150000; changed by Ian based on not wanting to push on the table any more than necessary
 
 // This code has built-in functionality to automatically clear motor alerts,
 // including motor shutdowns. Any uncleared alert will cancel and disallow motion.
@@ -118,13 +118,17 @@ bool processAlerts(MotorDriver *motor);
 void printAlerts(MotorDriver *motor);
 void clearAlerts(MotorDriver *motor);
 
-bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool checkX(int32_t position);
+bool checkY(int32_t position);
+bool checkZ(int32_t position);
+
+bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
           int32_t val3, MotorDriver *m3, int32_t val4, MotorDriver *m4, bool isAbsolute);
 bool move1Axis(int32_t val1, MotorDriver *m1, bool isAbsolute);
 bool move2Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, bool isAbsolute);
-bool move3Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool move3Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
                int32_t val3, MotorDriver *m3, bool isAbsolute);
-bool move4Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool move4Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
                int32_t val3, MotorDriver *m3, int32_t val4, MotorDriver *m4, bool isAbsolute);
 
 void moveRelativeX(int32_t distance);
@@ -176,85 +180,85 @@ bool processSoftStop();
  */
 
 void setup() {
-    // Start serial communication and wait for it to open properly before continuing
-    Serial.begin(baudRate);
-    while (!Serial) {}
+  // Start serial communication and wait for it to open properly before continuing
+  Serial.begin(baudRate);
+  while (!Serial) {}
 
-    if (debug) {Serial.println("Setup has begun");}
+  if (debug) { Serial.println("Setup has begun"); }
 
-    // Set up the interrupt connector in digital input mode.
-    // NOTE: The ClearCore manual clearly shows a pull-up resistor is always present,
-    // and the "soft stop" is connected between ground and the I/O pin, so it's normally
-    // high and will go low when the button is hit.
-    softStopConnector.Mode(Connector::INPUT_DIGITAL);
-    
-    // Set the ISR's to be called when the SoftStop button is hit or released.
-    // Initially turn the interrupts on (third argument 'true')
-    //softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
-    //softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
-    
-    // Read the Soft Stop button's initial state
-    // Although the line is active LOW due to a pull-up resistor, it seems ClearCore either 
-    // in hardware (with an inverter) or in software (in their firmware API) are inverting
-    // that notion - probably to make it easier on developers. So the API responds as if it
-    // is active HIGH. The ISR though triggers active LOW. How odd.
-    if (softStopIsPressed()) {
-        softStopped = true;
+  // Set up the interrupt connector in digital input mode.
+  // NOTE: The ClearCore manual clearly shows a pull-up resistor is always present,
+  // and the "soft stop" is connected between ground and the I/O pin, so it's normally
+  // high and will go low when the button is hit.
+  softStopConnector.Mode(Connector::INPUT_DIGITAL);
+
+  // Set the ISR's to be called when the SoftStop button is hit or released.
+  // Initially turn the interrupts on (third argument 'true')
+  //softStopConnector.InterruptHandlerSet(&softStopEngaged, InputManager::FALLING, true);
+  //softStopConnector.InterruptHandlerSet(&softStopReleased, InputManager::RISING, true);
+
+  // Read the Soft Stop button's initial state
+  // Although the line is active LOW due to a pull-up resistor, it seems ClearCore either
+  // in hardware (with an inverter) or in software (in their firmware API) are inverting
+  // that notion - probably to make it easier on developers. So the API responds as if it
+  // is active HIGH. The ISR though triggers active LOW. How odd.
+  if (softStopIsPressed()) {
+    softStopped = true;
+  }
+
+  if (debug) {
+    Serial.print("softStopped: ");
+    Serial.println(softStopped);
+  }
+
+  // Set up the soft e-stop on all motors
+  motorX.EStopConnector(softStopPin);
+  motorY1.EStopConnector(softStopPin);
+  motorY2.EStopConnector(softStopPin);
+  motorZ.EStopConnector(softStopPin);
+
+  // Configure connector 1 to be a digital output that controls the vacuum valve
+  ConnectorIO1.Mode(Connector::OUTPUT_DIGITAL);
+  vacuumOn();  // ensure the vacuum is ON during startup
+
+  // Set the input clocking rate. This normal rate is ideal for ClearPath step and direction applications.
+  MotorMgr.MotorInputClocking(MotorManager::CLOCK_RATE_NORMAL);
+
+  // Set all motor connectors to ClearPathMotor (CPM) step and direction mode.
+  MotorMgr.MotorModeSet(MotorManager::MOTOR_ALL, Connector::CPM_MODE_STEP_AND_DIR);
+
+  // Configure all four motors
+  MotorDriver *motor;
+  for (uint8_t i = 0; i < motorCount; i++) {
+    motor = motors[i];
+
+    // Set the HLFB mode to bipolar PWM
+    motor->HlfbMode(MotorDriver::HLFB_MODE_HAS_BIPOLAR_PWM);
+
+    // Set the HFLB carrier frequency to 482 Hz
+    motor->HlfbCarrier(MotorDriver::HLFB_CARRIER_482_HZ);
+
+    // Set the maximum velocity
+    motor->VelMax(velocityLimit);
+
+    // Set the maximum acceleration
+    motor->AccelMax(accelerationLimit);
+
+    // Enable the motor
+    motor->EnableRequest(true);
+
+    // Wait for HLFB to assert or for an alert to appear
+    while (motor->HlfbState() != MotorDriver::HLFB_ASSERTED && !motor->StatusReg().bit.AlertsPresent) {
+      continue;
     }
 
-    if (debug) {
-      Serial.print("softStopped: ");
-      Serial.println(softStopped);
+    // Check if motor alert occurred during enabling, and clear alert if present
+    if (!processAlerts(motor)) {
+      clearAlerts(motor);
     }
+  }
 
-    // Set up the soft e-stop on all motors
-    motorX.EStopConnector(softStopPin);
-    motorY1.EStopConnector(softStopPin);
-    motorY2.EStopConnector(softStopPin);
-    motorZ.EStopConnector(softStopPin);
-        
-    // Configure connector 1 to be a digital output that controls the vacuum valve
-    ConnectorIO1.Mode(Connector::OUTPUT_DIGITAL);
-    vacuumOn(); // ensure the vacuum is ON during startup
-
-    // Set the input clocking rate. This normal rate is ideal for ClearPath step and direction applications.
-    MotorMgr.MotorInputClocking(MotorManager::CLOCK_RATE_NORMAL);
-    
-    // Set all motor connectors to ClearPathMotor (CPM) step and direction mode.
-    MotorMgr.MotorModeSet(MotorManager::MOTOR_ALL, Connector::CPM_MODE_STEP_AND_DIR);
-    
-    // Configure all four motors
-    MotorDriver *motor;
-    for (uint8_t i = 0; i < motorCount; i++) {
-        motor = motors[i];
-        
-        // Set the HLFB mode to bipolar PWM
-        motor->HlfbMode(MotorDriver::HLFB_MODE_HAS_BIPOLAR_PWM);
-        
-        // Set the HFLB carrier frequency to 482 Hz
-        motor->HlfbCarrier(MotorDriver::HLFB_CARRIER_482_HZ);
-
-        // Set the maximum velocity
-        motor->VelMax(velocityLimit);
-
-        // Set the maximum acceleration
-        motor->AccelMax(accelerationLimit);
-        
-        // Enable the motor
-        motor->EnableRequest(true);
-        
-        // Wait for HLFB to assert or for an alert to appear
-        while (motor->HlfbState() != MotorDriver::HLFB_ASSERTED && !motor->StatusReg().bit.AlertsPresent) {
-          continue;
-        }
-        
-        // Check if motor alert occurred during enabling, and clear alert if present
-        if (!processAlerts(motor)) {
-          clearAlerts(motor);
-        } 
-    }
-
-    if (debug) {Serial.println("Startup finished");}
+  if (debug) { Serial.println("Startup finished"); }
 }
 
 
@@ -270,19 +274,23 @@ void setup() {
  *   none
  */
 void loop() {
-    char command;
-    // If a serial command has arrived, process it.
-    if (Serial.available()) {
-        // get the command (a single letter)
-        command = readChar(); 
-        // if the command is not a letter, skip it (could be a framing issue)
-        if (!isAlphaNumeric(command)) {
-            Serial.print("ERROR: Invalid command: ");
-            Serial.println(command);
-            return;
-        }
-        processCommand(command);
+  char command;
+
+  // Check for soft stop
+  processSoftStop();
+
+  // If a serial command has arrived, process it.
+  if (Serial.available()) {
+    // get the command (a single letter)
+    command = readChar();
+    // if the command is not a letter, skip it (could be a framing issue)
+    if (!isAlphaNumeric(command)) {
+      Serial.print("ERROR: Invalid command: ");
+      Serial.println(command);
+      return;
     }
+    processCommand(command);
+  }
 }
 
 
@@ -299,97 +307,97 @@ void loop() {
  *   none
  */
 void processCommand(char command) {
-    int32_t xPos = 0;
-    int32_t yPos = 0;
-    int32_t zPos = 0;
+  int32_t xPos = 0;
+  int32_t yPos = 0;
+  int32_t zPos = 0;
 
-    if (debug) {
-      Serial.print("processCommand: ");
-      Serial.println(command);
-    }
+  if (debug) {
+    Serial.print("processCommand: ");
+    Serial.println(command);
+  }
 
-    // Check state of soft estop
-    processSoftStop();
+  // Check state of soft estop
+  processSoftStop();
 
-    switch (command) {
-        case 's': // jog -y
-            if (!softStopped) { moveRelativeY(-jogDistanceY); }
-            break;
-            
-        case 'w': // jog +y
-            if (!softStopped) { moveRelativeY(jogDistanceY); }
-            break;
-            
-        case 'a': // jog -x
-            if (!softStopped) { moveRelativeX(-jogDistanceX); }
-            break;
-            
-        case 'd': // jog +x
-            if (!softStopped) { moveRelativeX(jogDistanceX); }
-            break;
-            
-        case 'o': // jog z
-            if (!softStopped) { moveRelativeZ(jogDistanceZ); }
-            break;
-            
-        case 'l': // jog -z
-            if (!softStopped) { moveRelativeZ(-jogDistanceZ); }
-            break;
-            
-        case 'h': // perform homing routine
-            if (!softStopped) { homeAllAxes(); }
-            break;
-            
-        case 'x': // move to absolute x
-            xPos = readInt();
-            if (!softStopped) { moveAbsoluteX(xPos); }
-            break;
-            
-        case 'y': // move to absolute y
-            yPos = readInt();
-            if (!softStopped) { moveAbsoluteY(yPos); }
-            break;
-            
-        case 'z': // move to absolute z
-            zPos = readInt();
-            if (!softStopped) { moveAbsoluteZ(zPos); }
-            break;
-            
-        case 'm': // move to absolute x,y, and z
-            xPos = readInt();
-            yPos = readInt();
-            zPos = readInt();
-            if (!softStopped) { moveAbsoluteXYZ(xPos, yPos, zPos); }
-            break;
-    
-        case '0': // turn vacuum off
-            if (!softStopped) { 
-              vacuumOff();
-              Serial.println("SUCCESS: vacuumOff");
-            }
-            break;
+  switch (command) {
+    case 's':  // jog -y
+      if (!softStopped) { moveRelativeY(-jogDistanceY); }
+      break;
 
-        case '1': // turn vacuum on
-            if (!softStopped) { 
-              vacuumOn();
-              Serial.println("SUCCESS: vacuumOn"); 
-            }
-            break;
+    case 'w':  // jog +y
+      if (!softStopped) { moveRelativeY(jogDistanceY); }
+      break;
 
-        case 'p': // print current position
-            if (!softStopped) { printCurrentPosXYZ(); }
-            break;
+    case 'a':  // jog -x
+      if (!softStopped) { moveRelativeX(-jogDistanceX); }
+      break;
 
-        default:
-            if (!softStopped) {
-                Serial.print("ERROR: Invalid command: ");
-                Serial.println(command);
-            }
-            break;
-    }
-    
-    // Skip the newline at the end of each command
-    readChar();
+    case 'd':  // jog +x
+      if (!softStopped) { moveRelativeX(jogDistanceX); }
+      break;
+
+    case 'o':  // jog z
+      if (!softStopped) { moveRelativeZ(jogDistanceZ); }
+      break;
+
+    case 'l':  // jog -z
+      if (!softStopped) { moveRelativeZ(-jogDistanceZ); }
+      break;
+
+    case 'h':  // perform homing routine
+      if (!softStopped) { homeAllAxes(); }
+      break;
+
+    case 'x':  // move to absolute x
+      xPos = readInt();
+      if (!softStopped) { moveAbsoluteX(xPos); }
+      break;
+
+    case 'y':  // move to absolute y
+      yPos = readInt();
+      if (!softStopped) { moveAbsoluteY(yPos); }
+      break;
+
+    case 'z':  // move to absolute z
+      zPos = readInt();
+      if (!softStopped) { moveAbsoluteZ(zPos); }
+      break;
+
+    case 'm':  // move to absolute x,y, and z
+      xPos = readInt();
+      yPos = readInt();
+      zPos = readInt();
+      if (!softStopped) { moveAbsoluteXYZ(xPos, yPos, zPos); }
+      break;
+
+    case '0':  // turn vacuum off
+      if (!softStopped) {
+        vacuumOff();
+        Serial.println("SUCCESS: vacuumOff");
+      }
+      break;
+
+    case '1':  // turn vacuum on
+      if (!softStopped) {
+        vacuumOn();
+        Serial.println("SUCCESS: vacuumOn");
+      }
+      break;
+
+    case 'p':  // print current position
+      if (!softStopped) { printCurrentPosXYZ(); }
+      break;
+
+    default:
+      if (!softStopped) {
+        Serial.print("ERROR: Invalid command: ");
+        Serial.println(command);
+      }
+      break;
+  }
+
+  // Skip the newline at the end of each command
+  readChar();
 }
 
 
@@ -405,9 +413,9 @@ void processCommand(char command) {
  *   The next character read from the serial port
  */
 char readChar() {
-    // Block (wait) until a character is available, then read and return it.
-    while (!Serial.available()) {}
-    return (char)Serial.read();
+  // Block (wait) until a character is available, then read and return it.
+  while (!Serial.available()) {}
+  return (char)Serial.read();
 }
 
 
@@ -423,9 +431,9 @@ char readChar() {
  *   The integer that was read from the serial port
  */
 int32_t readInt() {
-    // Block (wait) until a number is available, then read and return it.
-    while (!Serial.available()) {} // Wait for serial byte to be available  
-    return (int32_t) Serial.parseInt();
+  // Block (wait) until a number is available, then read and return it.
+  while (!Serial.available()) {}  // Wait for serial byte to be available
+  return (int32_t)Serial.parseInt();
 }
 
 
@@ -445,7 +453,7 @@ int32_t readInt() {
 bool processSoftStop() {
   MotorDriver *motor;
   bool softStopCurrentlyPressed = softStopIsPressed();
-  bool softStopAlertsWereCleared = false;
+  bool softStopWasCleared = false;
 
   // If the soft e-stop was just pressed, return false to indicate the issue
   if (softStopCurrentlyPressed && !softStopped) {
@@ -454,21 +462,27 @@ bool processSoftStop() {
     return false;
   }
 
+  // If soft stop was just released, indicate as much
+  if ((softStopped == true) && (!softStopCurrentlyPressed)) {
+    softStopped = false;
+    softStopWasCleared = true;
+  }
+
   // Check each motor for a soft EStop alert, and process it if found
   for (uint8_t i = 0; i < motorCount; i++) {
-      motor = motors[i];
-      if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
-        // If the soft estop has been released, clear the alert and set the global softStopped to false
-        if (!softStopCurrentlyPressed) {
-          clearAlerts(motor);
-          softStopped = false;
-          Delay_ms(10); // Delay to wait for alert to fully clear
-          softStopAlertsWereCleared = true;
-        }
+    motor = motors[i];
+    if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
+      // If the soft estop has been released, clear the alert
+      if (!softStopCurrentlyPressed) {
+        clearAlerts(motor);
+        Delay_ms(10);  // Delay to wait for alert to fully clear
+        softStopWasCleared = true;
       }
+    }
   }
+
   // If we detected the Soft E-Stop was released, print that to the serial port
-  if (softStopAlertsWereCleared) {
+  if (softStopWasCleared) {
     Serial.println("GO: Soft E-Stop Released");
   }
 
@@ -492,27 +506,27 @@ bool softStopIsPressed() {
  *   none
  */
 void printAlerts(MotorDriver *motor) {
-    // Print status of alerts as error messages over the serial connection
-    Serial.print("ERROR: Alerts present: ");
-    if (motor->AlertReg().bit.MotionCanceledInAlert) {
-        Serial.print("MotionCanceledInAlert ");
-    }
-    if (motor->AlertReg().bit.MotionCanceledPositiveLimit) {
-        Serial.print("MotionCanceledPositiveLimit ");
-    }
-    if (motor->AlertReg().bit.MotionCanceledNegativeLimit) {
-        Serial.print("MotionCanceledNegativeLimit ");
-    }
-    if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
-        Serial.print("MotionCanceledSensorEStop ");
-    }
-    if (motor->AlertReg().bit.MotionCanceledMotorDisabled) {
-        Serial.print("MotionCanceledMotorDisabled ");
-    }
-    if (motor->AlertReg().bit.MotorFaulted) {
-        Serial.print("MotorFaulted ");
-    }
-    Serial.println("");
+  // Print status of alerts as error messages over the serial connection
+  Serial.print("ERROR: Alerts present: ");
+  if (motor->AlertReg().bit.MotionCanceledInAlert) {
+    Serial.print("MotionCanceledInAlert ");
+  }
+  if (motor->AlertReg().bit.MotionCanceledPositiveLimit) {
+    Serial.print("MotionCanceledPositiveLimit ");
+  }
+  if (motor->AlertReg().bit.MotionCanceledNegativeLimit) {
+    Serial.print("MotionCanceledNegativeLimit ");
+  }
+  if (motor->AlertReg().bit.MotionCanceledSensorEStop) {
+    Serial.print("MotionCanceledSensorEStop ");
+  }
+  if (motor->AlertReg().bit.MotionCanceledMotorDisabled) {
+    Serial.print("MotionCanceledMotorDisabled ");
+  }
+  if (motor->AlertReg().bit.MotorFaulted) {
+    Serial.print("MotorFaulted ");
+  }
+  Serial.println("");
 }
 
 
@@ -530,15 +544,15 @@ void printAlerts(MotorDriver *motor) {
  *   none
  */
 void clearAlerts(MotorDriver *motor) {
-    if (motor->AlertReg().bit.MotorFaulted) {
-        // If a motor fault is present, clear it by cycling enable
-        // Serial.println("Faults present. Cycling motor enable signal to motor to clear faults.");
-        motor->EnableRequest(false);
-        Delay_ms(10);
-        motor->EnableRequest(true);
-    }
-    // Clear alerts
-    motor->ClearAlerts();
+  if (motor->AlertReg().bit.MotorFaulted) {
+    // If a motor fault is present, clear it by cycling enable
+    // Serial.println("Faults present. Cycling motor enable signal to motor to clear faults.");
+    motor->EnableRequest(false);
+    Delay_ms(10);
+    motor->EnableRequest(true);
+  }
+  // Clear alerts
+  motor->ClearAlerts();
 }
 
 
@@ -556,22 +570,21 @@ void clearAlerts(MotorDriver *motor) {
  *   False otherwise.
  */
 bool processAlerts(MotorDriver *motor) {
-    // If the soft e-stop is pressed, return false indicating the command was not successful 
-    if (!processSoftStop()) {return false;}
-    
-    // Check if a motor alert is currently preventing motion
-    if (motor->StatusReg().bit.AlertsPresent) {
-        // Clear alert if configured to do so
-        if (alwaysClearAlerts) {
-            if (debug) {Serial.println("Alert present. Automatically clearing it.");}
-            clearAlerts(motor);
-        }
-        else {
-            printAlerts(motor);
-            return false;
-        }
+  // If the soft e-stop is pressed, return false indicating the command was not successful
+  if (!processSoftStop()) { return false; }
+
+  // Check if a motor alert is currently preventing motion
+  if (motor->StatusReg().bit.AlertsPresent) {
+    // Clear alert if configured to do so
+    if (alwaysClearAlerts) {
+      if (debug) { Serial.println("Alert present. Automatically clearing it."); }
+      clearAlerts(motor);
+    } else {
+      printAlerts(motor);
+      return false;
     }
-    return true;
+  }
+  return true;
 }
 
 
@@ -588,123 +601,79 @@ bool processAlerts(MotorDriver *motor) {
  *   none
  */
 void moveRelativeX(int32_t distance) {
-    // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
-    if (move1Axis(-distance, &motorX, false)) {
-        Serial.println("SUCCESS: moveRelativeX");
-    }
+  // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
+  if (move1Axis(-distance, &motorX, false)) {
+    Serial.println("SUCCESS: moveRelativeX");
+  }
 }
 
 void moveRelativeY(int32_t distance) {
-    // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to *fewer* motor counts
-    if (move2Axis(-distance, &motorY1, distance, &motorY2, false)) {
-        Serial.println("SUCCESS: moveRelativeY");
-    }
+  // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to *fewer* motor counts
+  if (move2Axis(-distance, &motorY1, distance, &motorY2, false)) {
+    Serial.println("SUCCESS: moveRelativeY");
+  }
 }
 
 void moveRelativeZ(int32_t distance) {
-    // Keep the sign because UP in Z is positive motor counts
-    if (move1Axis(distance, &motorZ, false)) {
-        Serial.println("SUCCESS: moveRelativeZ");
-    }
+  // Keep the sign because UP in Z is positive motor counts
+  if (move1Axis(distance, &motorZ, false)) {
+    Serial.println("SUCCESS: moveRelativeZ");
+  }
 }
 
 bool move1Axis(int32_t val1, MotorDriver *m1, bool isAbsolute) {
-    return move(val1, m1, 0, NULL, 0, NULL, 0, NULL, isAbsolute);
+  return move(val1, m1, 0, NULL, 0, NULL, 0, NULL, isAbsolute);
 }
 
 bool move2Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, bool isAbsolute) {
-    return move(val1, m1, val2, m2, 0, NULL, 0, NULL, isAbsolute);
+  return move(val1, m1, val2, m2, 0, NULL, 0, NULL, isAbsolute);
 }
 
-bool move3Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool move3Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
                int32_t val3, MotorDriver *m3, bool isAbsolute) {
-    return move(val1, m1, val2, m2, val3, m3, 0, NULL, isAbsolute);
+  return move(val1, m1, val2, m2, val3, m3, 0, NULL, isAbsolute);
 }
 
-bool move4Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool move4Axis(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
                int32_t val3, MotorDriver *m3, int32_t val4, MotorDriver *m4, bool isAbsolute) {
-    return move(val1, m1, val2, m2, val3, m3, val4, m4, isAbsolute);
+  return move(val1, m1, val2, m2, val3, m3, val4, m4, isAbsolute);
 }
 
-bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
+bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
           int32_t val3, MotorDriver *m3, int32_t val4, MotorDriver *m4, bool isAbsolute) {
-              
-    // Process any alerts, returning false if there are alerts that weren't auto-cleared
-    if ( (m1 != NULL) && !processAlerts(m1) ) {return false;}
-    if ( (m2 != NULL) && !processAlerts(m2) ) {return false;}
-    if ( (m3 != NULL) && !processAlerts(m3) ) {return false;}
-    if ( (m4 != NULL) && !processAlerts(m4) ) {return false;}
-    
-    // Command the move(s)
-    if (isAbsolute) {
-        if (m1 != NULL) { m1->Move(val1, MotorDriver::MOVE_TARGET_ABSOLUTE); }
-        if (m2 != NULL) { m2->Move(val2, MotorDriver::MOVE_TARGET_ABSOLUTE); }
-        if (m3 != NULL) { m3->Move(val3, MotorDriver::MOVE_TARGET_ABSOLUTE); }
-        if (m4 != NULL) { m4->Move(val4, MotorDriver::MOVE_TARGET_ABSOLUTE); }
-    }
-    else {
-        if (m1 != NULL) { m1->Move(val1); }
-        if (m2 != NULL) { m2->Move(val2); }
-        if (m3 != NULL) { m3->Move(val3); }
-        if (m4 != NULL) { m4->Move(val4); }
-    }
 
-    // Wait for move(s) to finish
-    if (m1 != NULL) { waitForMoveToComplete(m1); }
-    if (m2 != NULL) { waitForMoveToComplete(m2); }
-    if (m3 != NULL) { waitForMoveToComplete(m3); }
-    if (m4 != NULL) { waitForMoveToComplete(m4); }
-    
-    // If the soft estop was pressed in the middle of the move, at this point
-    // the machine MAY be decelerating. In that case StepsComplete will be false 
-    // (it will get set to true after the decel is finished)
-    // Another possibility is that the soft estop was pressed just as the machine
-    // was finishing the move, in which case StepsComplete will be true but AlertsPresent will also be true.
-    
-    //Serial.print("HLFB_DEASSERTED ");
-    //Serial.println(MotorDriver::HLFB_DEASSERTED);
-    //Serial.print("HLFB_ASSERTED ");
-    //Serial.println(MotorDriver::HLFB_ASSERTED);
-    //Serial.print("HLFB_HAS_MEASUREMENT ");
-    //Serial.println(MotorDriver::HLFB_HAS_MEASUREMENT);
-    //Serial.print("HLFB_UNKNOWN ");
-    //Serial.println(MotorDriver::HLFB_UNKNOWN);
+  // Process any alerts, returning false if there are alerts that weren't auto-cleared
+  if ((m1 != NULL) && !processAlerts(m1)) { return false; }
+  if ((m2 != NULL) && !processAlerts(m2)) { return false; }
+  if ((m3 != NULL) && !processAlerts(m3)) { return false; }
+  if ((m4 != NULL) && !processAlerts(m4)) { return false; }
 
-    // Delay to allow any alerts to appear
-    // if (debug) {
-    //   Serial.print("BEFORE DELAY: StepsComplete ");
-    //   Serial.print(m1->StepsComplete());
-    //   Serial.print(", HlfbState ");
-    //   Serial.print(m1->HlfbState());
-    //   Serial.print(", AlertsPresent ");
-    //   Serial.println(m1->StatusReg().bit.AlertsPresent);
-    // }
-    // Delay_ms(100);
-    // if (debug) {
-    //   Serial.print("AFTER DELAY: StepsComplete ");
-    //   Serial.print(m1->StepsComplete());
-    //   Serial.print(", HlfbState ");
-    //   Serial.print(m1->HlfbState());
-    //   Serial.print(", AlertsPresent ");
-    //   Serial.println(m1->StatusReg().bit.AlertsPresent); 
-    // }
-    // Delay_ms(5000);
-    // if (debug) {
-    //   Serial.print("AFTER 2nd DELAY: StepsComplete ");
-    //   Serial.print(m1->StepsComplete());
-    //   Serial.print(", HlfbState ");
-    //   Serial.print(m1->HlfbState());
-    //   Serial.print(", AlertsPresent ");
-    //   Serial.println(m1->StatusReg().bit.AlertsPresent); 
-    // }
+  // Command the move(s)
+  if (isAbsolute) {
+    if (m1 != NULL) { m1->Move(val1, MotorDriver::MOVE_TARGET_ABSOLUTE); }
+    if (m2 != NULL) { m2->Move(val2, MotorDriver::MOVE_TARGET_ABSOLUTE); }
+    if (m3 != NULL) { m3->Move(val3, MotorDriver::MOVE_TARGET_ABSOLUTE); }
+    if (m4 != NULL) { m4->Move(val4, MotorDriver::MOVE_TARGET_ABSOLUTE); }
+  } else {
+    if (m1 != NULL) { m1->Move(val1); }
+    if (m2 != NULL) { m2->Move(val2); }
+    if (m3 != NULL) { m3->Move(val3); }
+    if (m4 != NULL) { m4->Move(val4); }
+  }
 
-    // Process any alerts, returning false if there are alerts that weren't auto-cleared
-    if ( (m1 != NULL) && !processAlerts(m1) ) {return false;}
-    if ( (m2 != NULL) && !processAlerts(m2) ) {return false;}
-    if ( (m3 != NULL) && !processAlerts(m3) ) {return false;}
-    if ( (m4 != NULL) && !processAlerts(m4) ) {return false;}
-    
-    return true;
+  // Wait for move(s) to finish
+  if (m1 != NULL) { waitForMoveToComplete(m1); }
+  if (m2 != NULL) { waitForMoveToComplete(m2); }
+  if (m3 != NULL) { waitForMoveToComplete(m3); }
+  if (m4 != NULL) { waitForMoveToComplete(m4); }
+
+  // Process any alerts, returning false if there are alerts that weren't auto-cleared
+  if ((m1 != NULL) && !processAlerts(m1)) { return false; }
+  if ((m2 != NULL) && !processAlerts(m2)) { return false; }
+  if ((m3 != NULL) && !processAlerts(m3)) { return false; }
+  if ((m4 != NULL) && !processAlerts(m4)) { return false; }
+
+  return true;
 }
 
 
@@ -721,35 +690,77 @@ bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2, \
  *   none
  */
 void waitForMoveToComplete(MotorDriver *motor) {
-    // Wait for the move to finish or an alert to be set
-    if (debug) {Serial.println("Waiting for move to complete...");}
-    
-    // If the soft estop was pressed in the middle of the move, at that point
-    // the machine will start decelerating. During that time, case StepsComplete will be false 
-    // (it will get set to true only after the decel is finished) and the estop alert will not yet be set (it gets set only after the decel is finished).
-    // So one way we can detect this is because during decel, the motor's HlfbState() will be HLFB_HAS_MEASUREMENT.
-    // So we want to wait for either of the following cases to be true before we return:
-    //   Motor finished move (StepsComplete==true), HLFB Asserted, and No Alerts Present (normal case, all is good!)
-    //   Motor didn't finish move (StepsComplete==false), but an Alert is Set (error! some alert was set. might be e-stop)
-    //while ((!motor->StepsComplete() && \
-    //        motor->HlfbState() == MotorDriver::HLFB_DEASSERTED) && \
-    //        !motor->StatusReg().bit.AlertsPresent) {
-    //    continue;
-    //}
-    while (true) {
-      if ( (motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (!motor->StatusReg().bit.AlertsPresent) ) {break;}
-      if ( (motor->StepsComplete() == false) && (motor->StatusReg().bit.AlertsPresent) ) {break;}
-    }
+  // Wait for the move to finish or an alert to be set
+  if (debug) { Serial.println("Waiting for move to complete..."); }
 
-    if (debug) {Serial.println("Checking to see if alerts are present.");}
-    
-    // Stop all motors if there was an alert
-    if (motor->StatusReg().bit.AlertsPresent) {
-        if (debug) {Serial.println("Alert was present. Stopping all motors."); printAlerts(motor);}
-        stopAllMotors();
+  // If the soft estop was pressed in the middle of the move, at that point
+  // the machine will start decelerating. During that time, case StepsComplete will be false
+  // (it will get set to true only after the decel is finished) and the estop alert will not yet be set (it gets set only after the decel is finished).
+  // So one way we can detect this is because during decel, the motor's HlfbState() will be HLFB_HAS_MEASUREMENT.
+  // So we want to wait for either of the following cases to be true before we return:
+  //   Motor finished move, all good: (StepsComplete==true), HLFB Asserted, and No Alerts Present
+  //   Soft stop was hit, motor finished decel: (StepsComplete==true), HLFB is Asserted, Alert is Set
+  //   Some other alert was raised: (StepsComplete==false), HLFB is Asserted, Alert is Set
+  while (true) {
+    if ((motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (!motor->StatusReg().bit.AlertsPresent)) { break; }
+    if ((motor->StepsComplete() == true) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (motor->StatusReg().bit.AlertsPresent)) { break; }
+    if ((motor->StepsComplete() == false) && (motor->HlfbState() == MotorDriver::HLFB_ASSERTED) && (motor->StatusReg().bit.AlertsPresent)) { break; }
+  }
+
+  if (debug) { Serial.println("Checking to see if alerts are present."); }
+
+  // Stop all motors if there was an alert
+  if (motor->StatusReg().bit.AlertsPresent) {
+    if (debug) {
+      Serial.println("Alert was present. Stopping all motors.");
+      printAlerts(motor);
     }
+    stopAllMotors();
+  }
 }
 
+bool checkX(int32_t position) {
+  // Ensure move is within range
+  if ((position < minX) || (position > maxX)) {
+    Serial.print("ERROR: X Position ");
+    Serial.print(position);
+    Serial.print(" out of range (");
+    Serial.print(minX);
+    Serial.print(" to ");
+    Serial.print(maxX);
+    Serial.println(")");
+    return false;
+  }
+  return true;
+}
+
+bool checkY(int32_t position) {
+  if ((position < minY) || (position > maxY)) {
+    Serial.print("ERROR: Y Position ");
+    Serial.print(position);
+    Serial.print(" out of range (");
+    Serial.print(minY);
+    Serial.print(" to ");
+    Serial.print(maxY);
+    Serial.println(")");
+    return false;
+  }
+  return true;
+}
+
+bool checkZ(int32_t position) {
+  if ((position < minZ) || (position > maxZ)) {
+    Serial.print("ERROR: Z Position ");
+    Serial.print(position);
+    Serial.print(" out of range (");
+    Serial.print(minZ);
+    Serial.print(" to ");
+    Serial.print(maxZ);
+    Serial.println(")");
+    return false;
+  }
+  return true;
+}
 
 /*------------------------------------------------------------------------------
  * moveAbsolute{X,Y,Z}
@@ -764,214 +775,204 @@ void waitForMoveToComplete(MotorDriver *motor) {
  *   none
  */
 void moveAbsoluteX(int32_t position) {
-    // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
-    if (move1Axis(-position, &motorX, true)) {
-        Serial.println("SUCCESS: moveAbsoluteX");
-    }
+  // Ensure move is within range
+  if (!checkX(position)) { return; }
+
+  // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
+  if (move1Axis(-position, &motorX, true)) {
+    Serial.println("SUCCESS: moveAbsoluteX");
+  }
 }
 
 void moveAbsoluteY(int32_t position) {
-    // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
-    if (move2Axis(-position, &motorY1, position, &motorY2, true)) {
-        Serial.println("SUCCESS: moveAbsoluteY");
-    }
+  // Ensure move is within range
+  if (!checkY(position)) { return; }
+
+  // Reverse the sign because our axis *positive* (pointing away from home position) corresponds to a motor counts *negative*
+  if (move2Axis(-position, &motorY1, position, &motorY2, true)) {
+    Serial.println("SUCCESS: moveAbsoluteY");
+  }
 }
 
 void moveAbsoluteZ(int32_t position) {
-    if (move1Axis(position, &motorZ, true)) {
-        Serial.println("SUCCESS: moveAbsoluteZ");
-    }
+  // Ensure move is within range
+  if (!checkZ(position)) { return; }
+
+  // Subtract position from Max to invert notion of Z axis
+  if (move1Axis(position - maxZ, &motorZ, true)) {
+    Serial.println("SUCCESS: moveAbsoluteZ");
+  }
 }
 
 void moveAbsoluteXYZ(int32_t posX, int32_t posY, int32_t posZ) {
-    if (move4Axis(-posX, &motorX, -posY, &motorY1, posY, &motorY2, posZ, &motorZ, true)) {
-        Serial.println("SUCCESS: moveAbsoluteXYZ");
-    }
+  // Ensure movement is within range
+  if (!checkX(posX)) { return; }
+  if (!checkY(posY)) { return; }
+  if (!checkZ(posZ)) { return; }
+
+  // Invert X and Y, and for Z just subtract maxZ from position to invert notion of Z axis
+  if (move4Axis(-posX, &motorX, -posY, &motorY1, posY, &motorY2, posZ - maxZ, &motorZ, true)) {
+    Serial.println("SUCCESS: moveAbsoluteXYZ");
+  }
 }
 
 void stopAllMotors() {
-    // Stop all motor movement immediately
-    motorX.MoveStopAbrupt();
-    motorY1.MoveStopAbrupt();
-    motorY2.MoveStopAbrupt();
-    motorZ.MoveStopAbrupt();
+  // Stop all motor movement immediately
+  motorX.MoveStopAbrupt();
+  motorY1.MoveStopAbrupt();
+  motorY2.MoveStopAbrupt();
+  motorZ.MoveStopAbrupt();
 }
 
 void disableAllMotors() {
-    // Disable all motors, which sets up alerts
-    motorX.EnableRequest(false); 
-    motorY1.EnableRequest(false);
-    motorY2.EnableRequest(false);
-    motorZ.EnableRequest(false);
+  // Disable all motors, which sets up alerts
+  motorX.EnableRequest(false);
+  motorY1.EnableRequest(false);
+  motorY2.EnableRequest(false);
+  motorZ.EnableRequest(false);
 }
 
 void enableAllMotors() {
-    // Enable all motors
-    motorX.EnableRequest(true);
-    motorY1.EnableRequest(true);
-    motorY2.EnableRequest(true);
-    motorZ.EnableRequest(true);
+  // Enable all motors
+  motorX.EnableRequest(true);
+  motorY1.EnableRequest(true);
+  motorY2.EnableRequest(true);
+  motorZ.EnableRequest(true);
 }
 
 void homeAllAxes() {
 
-    if ( (home1Axis(8000, &motorX)) && \
-         (home2Axis(8000, &motorY1, -8000, &motorY2)) && \
-         (home1Axis(8000, &motorZ)) ) {
-        Serial.println("SUCCESS: homeAllAxes");
-    }
+  if ((home1Axis(8000, &motorX)) && (home2Axis(8000, &motorY1, -8000, &motorY2)) && (home1Axis(8000, &motorZ))) {
+    Serial.println("SUCCESS: homeAllAxes");
+  }
 }
 
 bool home1Axis(int32_t velocity, MotorDriver *motor) {
-    motor->EnableRequest(false);
-    Delay_ms(10);
-    motor->EnableRequest(true);
-        
-    Delay_ms(500);
+  motor->EnableRequest(false);
+  Delay_ms(10);
+  motor->EnableRequest(true);
 
-    // Start moving towards the hardstop
-    motor->MoveVelocity(velocity);
-   
-    // Check if any motor alerts occurred during onset of motion, and clear alerts if configured to do so
-    if (!processAlerts(motor)) {
-        // If faults coult not be cleared, cancel homing routine
-        stopAllMotors();
-        return false;
-    }
-    
-    // Delay so HLFB has time to deassert
-    Delay_ms(100);
-    
-    // Waits for HLFB to assert on the motors, meaning the hardstop has been reached
-    while (motor->HlfbState() != MotorDriver::HLFB_ASSERTED) {
-        // Check if a motor alert occurred so far, and clear alerts if configured to do so
-        if (!processAlerts(motor)) {
-            // If faults coult not be cleared, cancel homing routine
-            stopAllMotors();
-            return false;
-        }
-    }
+  Delay_ms(500);
 
-    // Stop the velocity move now that the hardstop is reached
-    motor->MoveStopAbrupt();
-    Delay_ms(1000);
+  // Start moving towards the hardstop
+  motor->MoveVelocity(velocity);
 
-    // Move away from the hard stop (opposite direction that we were moving). 
-    // Any move away from the hardstop will conclude the homing sequence.
-    if (velocity > 0) { motor->Move(-offsetHome); }
-    else { motor->Move(offsetHome); }
-    
-    // Delay so HLFB has time to deassert
-    Delay_ms(1000);
-    
-    // Waits for HLFB to assert, meaning homing is complete
-    waitForMoveToComplete(motor);
-   
+  // Check if any motor alerts occurred during onset of motion, and clear alerts if configured to do so
+  if (!processAlerts(motor)) {
+    // If faults coult not be cleared, cancel homing routine
+    stopAllMotors();
+    return false;
+  }
+
+  // Delay so HLFB has time to deassert
+  Delay_ms(100);
+
+  // Waits for HLFB to assert on the motors, meaning the hardstop has been reached
+  while (motor->HlfbState() != MotorDriver::HLFB_ASSERTED) {
     // Check if a motor alert occurred so far, and clear alerts if configured to do so
     if (!processAlerts(motor)) {
-        // If faults coult not be cleared, cancel homing routine
-        stopAllMotors();
-        return false;
+      // If faults coult not be cleared, cancel homing routine
+      stopAllMotors();
+      return false;
     }
-    
-    // Zero the motor's reference position after homing to allow for accurate
-    // absolute position moves
-    motor->PositionRefSet(0);
-    
-    return true;
+  }
 
+  // Stop the velocity move now that the hardstop is reached
+  motor->MoveStopAbrupt();
+
+  // Delay so HLFB has time to deassert
+  Delay_ms(1000);
+
+  // Check if a motor alert occurred so far, and clear alerts if configured to do so
+  if (!processAlerts(motor)) {
+    // If faults coult not be cleared, cancel homing routine
+    stopAllMotors();
+    return false;
+  }
+
+  // Zero the motor's reference position after homing to allow for accurate
+  // absolute position moves
+  motor->PositionRefSet(0);
+
+  return true;
 }
-
 
 bool home2Axis(int32_t velocity1, MotorDriver *m1, int32_t velocity2, MotorDriver *m2) {
 
-    m1->EnableRequest(false);
-    Delay_ms(10);
-    m1->EnableRequest(true);
-    
-    m2->EnableRequest(false);
-    Delay_ms(10);
-    m2->EnableRequest(true);
-    
-    Delay_ms(500);
+  m1->EnableRequest(false);
+  Delay_ms(10);
+  m1->EnableRequest(true);
 
-    // Start moving towards the hardstop
-    m1->MoveVelocity(velocity1);
-    m2->MoveVelocity(velocity2);
-   
-    // Check if any motor alerts occurred during onset of motion, and clear alerts if configured to do so
-    if ( (!processAlerts(m1)) || (!processAlerts(m2)) ) {
-        // If faults coult not be cleared, cancel homing routine
-        stopAllMotors();
-        return false;
-    }
-    
-    // Delay so HLFB has time to deassert
-    Delay_ms(100);
-    
-    // Waits for HLFB to assert again on both motors, meaning the hardstops have been reached
-    while ((m1->HlfbState() != MotorDriver::HLFB_ASSERTED) || (m2->HlfbState() != MotorDriver::HLFB_ASSERTED)) {
-        // Check if any motor alerts occurred so far, and clear alerts if configured to do so
-        if ( (!processAlerts(m1)) || (!processAlerts(m2)) ) {
-            // If faults coult not be cleared, cancel homing routine
-            stopAllMotors();
-            return false;
-        }
-    }
-    
-    // Stop the velocity move now that the hardstop is reached
-    m1->MoveStopAbrupt();
-    m2->MoveStopAbrupt();
-    Delay_ms(1000);
+  m2->EnableRequest(false);
+  Delay_ms(10);
+  m2->EnableRequest(true);
 
-    // Move away from the hard stop (opposite direction that we were moving). 
-    // Any move away from the hardstop will conclude the homing sequence.
-    if (velocity1 > 0) { m1->Move(-offsetHome); }
-    else { m1->Move(offsetHome); }
-    if (velocity2 > 0) { m2->Move(-offsetHome); }
-    else { m2->Move(offsetHome); }
-    
-    // Delay so HLFB has time to deassert
-    Delay_ms(1000);
-    
-    // Waits for HLFB to assert, meaning homing is complete
-    waitForMoveToComplete(m1);
-    waitForMoveToComplete(m2);
-   
+  Delay_ms(500);
+
+  // Start moving towards the hardstop
+  m1->MoveVelocity(velocity1);
+  m2->MoveVelocity(velocity2);
+
+  // Check if any motor alerts occurred during onset of motion, and clear alerts if configured to do so
+  if ((!processAlerts(m1)) || (!processAlerts(m2))) {
+    // If faults coult not be cleared, cancel homing routine
+    stopAllMotors();
+    return false;
+  }
+
+  // Delay so HLFB has time to deassert
+  Delay_ms(100);
+
+  // Waits for HLFB to assert again on both motors, meaning the hardstops have been reached
+  while ((m1->HlfbState() != MotorDriver::HLFB_ASSERTED) || (m2->HlfbState() != MotorDriver::HLFB_ASSERTED)) {
     // Check if any motor alerts occurred so far, and clear alerts if configured to do so
-    if ( (!processAlerts(m1)) || (!processAlerts(m2)) ) {
-        // If faults coult not be cleared, cancel homing routine
-        stopAllMotors();
-        return false;
+    if ((!processAlerts(m1)) || (!processAlerts(m2))) {
+      // If faults coult not be cleared, cancel homing routine
+      stopAllMotors();
+      return false;
     }
-    
-    // Zero the motor's reference position after homing to allow for accurate
-    // absolute position moves
-    m1->PositionRefSet(0);
-    m2->PositionRefSet(0);
-    
-    return true;
+  }
 
+  // Stop the velocity move now that the hardstop is reached
+  m1->MoveStopAbrupt();
+  m2->MoveStopAbrupt();
+
+  // Delay so HLFB has time to deassert
+  Delay_ms(1000);
+
+  // Check if any motor alerts occurred so far, and clear alerts if configured to do so
+  if ((!processAlerts(m1)) || (!processAlerts(m2))) {
+    // If faults coult not be cleared, cancel homing routine
+    stopAllMotors();
+    return false;
+  }
+
+  // Zero the motor's reference position after homing to allow for accurate
+  // absolute position moves
+  m1->PositionRefSet(0);
+  m2->PositionRefSet(0);
+
+  return true;
 }
 
 void vacuumOff() {
-    // Turn the vacuum off. The vacuum relay's coil is wired between the IO pin and 24V and the
-    // output stage will act as a current sink and turn the vacuum ON only when you set the output LOW (false). 
-    // Likewise, a HIGH (true) output will turn the vacuum OFF.
-    ConnectorIO1.State(true); // output = true -> valve deactivates, vacuum is interrupted, (piece released)
+  // Turn the vacuum off. The vacuum relay's coil is wired between the IO pin and 24V and the
+  // output stage will act as a current sink and turn the vacuum ON only when you set the output LOW (false).
+  // Likewise, a HIGH (true) output will turn the vacuum OFF.
+  ConnectorIO1.State(true);  // output = true -> valve deactivates, vacuum is interrupted, (piece released)
 }
 
 void vacuumOn() {
-    // Turn the vacuum on.
-    ConnectorIO1.State(false); // output = false -> valve activates, vacuum is NOT interrupted, ready to pick a piece
+  // Turn the vacuum on.
+  ConnectorIO1.State(false);  // output = false -> valve activates, vacuum is NOT interrupted, ready to pick a piece
 }
 
 void printCurrentPosXYZ() {
-    // Print the current position over the serial port
-    Serial.print("SUCCESS: ");
-    Serial.print((int32_t)motorX.PositionRefCommanded());
-    Serial.print(", ");
-    Serial.print((int32_t)motorY1.PositionRefCommanded());
-    Serial.print(", ");
-    Serial.println((int32_t)motorZ.PositionRefCommanded());
+  // Print the current position over the serial port
+  Serial.print("SUCCESS: ");
+  Serial.print((int32_t)-motorX.PositionRefCommanded());  // Invert sign
+  Serial.print(", ");
+  Serial.print((int32_t)-motorY1.PositionRefCommanded());  // Invert sign
+  Serial.print(", ");
+  Serial.println((int32_t)maxZ + motorZ.PositionRefCommanded());  // Normally negative. Add to maxZ to invert
 }
