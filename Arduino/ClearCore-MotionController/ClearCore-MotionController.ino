@@ -23,9 +23,10 @@
  *       '0'       vacuum off
  *       '1'       vacuum on
  *
- *     ** Special case: When the soft stop button is pressed, ClearCore responds with "STOP: Soft Stop Engaged"
- *        and will ignore all commands sent by Client until the soft stop is released, at which point the
- *        ClearCore will respond with "GO: Soft Stop Released"
+ *     ** Special case: When the soft stop button or e-stop button is pressed, ClearCore responds with 
+ *        "STOP: Soft Stop Engaged" or "STOP: E-Stop Engaged" (respectively) and will ignore all commands
+ *        sent by Client until the stop is released, at which point the ClearCore will respond with
+ *        "GO: Soft Stop Released" or "GO: E-Stop Released" (respectively).
  *
  * Requirements:
  *   1. ClearPath motors must be connected to Connector M-0 through M-3
@@ -464,7 +465,7 @@ bool processSoftStop() {
   // If the soft e-stop was just pressed, return false to indicate the issue
   if (softStopCurrentlyPressed && !softStopped) {
     softStopped = true;
-    Serial.println("STOP: Soft E-Stop Engaged");
+    Serial.println("STOP: Soft Stop Engaged");
     return false;
   }
 
@@ -489,7 +490,7 @@ bool processSoftStop() {
 
   // If we detected the Soft E-Stop was released, print that to the serial port
   if (softStopWasCleared) {
-    Serial.println("GO: Soft E-Stop Released");
+    Serial.println("GO: Soft Stop Released");
   }
 
   return true;
@@ -520,7 +521,7 @@ bool processEStop() {
         // If E-Stop was *just* pressed, record it and return false to signal the command did not complete successfully
         if (!eStopped) {
           eStopped = true;
-          Serial.println("STOP: E-Stop was engaged");
+          Serial.println("STOP: E-Stop Engaged");
         }
       }
     }
@@ -528,7 +529,7 @@ bool processEStop() {
 
   if (alertWasCleared) {
     eStopped = false;
-    Serial.println("GO: E-Stop was released");
+    Serial.println("GO: E-Stop Released");
     // Make SURE all the motor alerts had a chance to clear
     Delay_ms(1000);
     for (uint8_t i = 0; i < motorCount; i++) {
