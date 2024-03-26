@@ -704,6 +704,8 @@ bool move(int32_t val1, MotorDriver *m1, int32_t val2, MotorDriver *m2,
   if ((m4 != NULL) && !processAlerts(m4)) { return false; }
 
   // Command the move(s)
+  // Note: The move command can return false. Currently we catch the causes later on
+  // using waitForMoveToComplete and processAlerts, so we don't look at the return value here.
   if (isAbsolute) {
     if (m1 != NULL) { m1->Move(val1, MotorDriver::MOVE_TARGET_ABSOLUTE); }
     if (m2 != NULL) { m2->Move(val2, MotorDriver::MOVE_TARGET_ABSOLUTE); }
