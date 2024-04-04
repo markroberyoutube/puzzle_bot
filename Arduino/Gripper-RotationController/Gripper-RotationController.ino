@@ -12,12 +12,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "Arduino.h"
-#include "RS485.h"
+//#include "RS485.h"
 
+/*
 //RS485
 const uint8_t sendPin  = 4;
 const uint8_t deviceID = 1;
 RS485 rs485(&Serial, sendPin, deviceID);
+*/
 
 // Miranda or Titan motor define LENGTH 240
 #define LENGTH 230
@@ -38,6 +40,12 @@ uint16_t angle = 0;
 int i=0;
 int encoderPin=A0; // encoder pin analog input
 int val=0;        // encoder readout
+const int pwmPin = 3;  // PWM pin where the signal is connected
+int dutyCycle = 0;
+//lights
+int pin_lightL = 1;
+int pin_lightR = 2;
+
 
 // declare functions
 void TitanWrite(byte address, byte command, byte* tx_data, int n_bytes);
@@ -46,7 +54,8 @@ void home();
 int32_t ReadNumber ();
 void Rotate(uint16_t a);
 void waitForSerial();
-void waitForRS485();
+int getPWMDutyCycle(int pin);
+//void waitForRS485();
 
   
 void setup()
@@ -57,10 +66,17 @@ void setup()
   Serial.println("\nHello World");
 
   //wait for motor startup sequence to finish
-  delay(600);
-  Serial.print("RS485_LIB_VERSION: ");
-  Serial.println(RS485_LIB_VERSION);
+  //delay(600);
+  //Serial.print("RS485_LIB_VERSION: ");
+  //Serial.println(RS485_LIB_VERSION);
   //Serial.println("Press any key to complete initial set up...");
+
+  // turn on lights
+  pinMode(pin_lightR, OUTPUT);
+  pinMode(pin_lightL, OUTPUT);
+
+  digitalWrite(pin_lightR,HIGH);
+  digitalWrite(pin_lightL,HIGH);
 }
 
 
@@ -109,8 +125,8 @@ void loop() {
       case 'r': // rotate in counts - absolute motion
         Serial.println("Enter motor abs position in counts [0 - 65536]"); 
         angle=ReadNumber(); //  
-        rs485.print("Rotating ");
-        rs485.print(angle);
+        Serial.println("Rotating ");
+        Serial.println(angle);
         if (angle<0) {
           Serial.println("Rotation should be a positive number (absolute coordinate). Exiting motion..");
           break;
@@ -148,11 +164,17 @@ void loop() {
         TitanWrite(dev_addr, 0x06, tx_data, 2); // 
         break;
       
-      case 'e': // read the encoder
+      case 'e': // read the encoder analog input
         val = analogRead(encoderPin);  // read the input pin
-         Serial.println((String)"Encoder value = " + val);
+         Serial.println((String)"Encoder value - analog (0-1024) = " + val);
+
+      case 'p': // read the encoder digital input
+        dutyCycle = getPWMDutyCycle(pwmPin);  // Read PWM duty cycle
+         Serial.println((String)"Encoder value - digital (0-1000) = " + dutyCycle);
+      
       case 10: //'\n'
         break;
+
       default:
         Serial.println("\nMmm.. not sure about that");
         waitForSerial();
@@ -241,10 +263,10 @@ void TitanRead(int address, byte command, byte* rx_data, int n_bytes)
 
  int32_t ReadNumber () {
   int c=0;
-  while (!rs485.available()) {}
+  while (!Serial.available()) {}
   integerValue = 0;		  // throw away previous integerValue
   while(1) {			  // force into a loop until 'n' is received
-    incomingByte = rs485.read();
+    incomingByte = Serial.read();
     if ((incomingByte == '\n')&&(c)) break;   // exit the while(1), we're done receiving
    // if ((incomingByte == '\n')&&(!c)) continue;   // ignore \n as first char
     if (incomingByte == -1) continue;  // if no characters are in the buffer read() returns -1
@@ -262,10 +284,23 @@ void waitForSerial() {
   //Serial.println(Serial.read());
 }
 
+int getPWMDutyCycle(int pin) {
+  // Read PWM duty cycle
+  unsigned long highTime = pulseIn(pin, HIGH);  // Time in microseconds when the signal is high
+  unsigned long lowTime = pulseIn(pin, LOW);    // Time in microseconds when the signal is low
+  
+  // Calculate duty cycle as a percentage
+  int dc = map(highTime, 0, highTime + lowTime, 0, 1000);
+  
+  return dc;
+}
+
+/*
 void waitForRS485() {
   while (!rs485.available()) {
   }
   //Serial.println(Serial.read());
 }
+*/
 
 
