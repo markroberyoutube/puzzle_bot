@@ -1037,10 +1037,10 @@ void vacuumOn() {
 
 void printCurrentPosXYZ() {
   // Print the current position over the serial port
-  Serial.print("SUCCESS: ");
-  Serial.print((int32_t)-motorX.PositionRefCommanded());  // Invert sign
+  Serial.print("SUCCESS: printCurrentPosXYZ ");
+  Serial.print((int32_t)(-motorX.PositionRefCommanded()));  // Invert sign
   Serial.print(", ");
-  Serial.print((int32_t)-motorY1.PositionRefCommanded());  // Invert sign
+  Serial.print((int32_t)(-motorY1.PositionRefCommanded()));  // Invert sign
   Serial.print(", ");
-  Serial.println((int32_t)maxZ + motorZ.PositionRefCommanded());  // Normally negative. Add to maxZ to invert
+  Serial.println((int32_t)(maxZ + motorZ.PositionRefCommanded()));  // Normally negative. Add to maxZ to invert
 }
