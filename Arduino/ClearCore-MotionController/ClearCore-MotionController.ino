@@ -15,11 +15,11 @@
  *       'p'       returns the current x,y,z position (motor counts as integers)
  *       'h'       performs homing routine in X, Y, and Z
  *       'w'       jog +y by the default Y distance
- *       'd'       jog -y by the default Y distance
+ *       's'       jog -y by the default Y distance
  *       'a'       jog -x by the default X distance
  *       'd'       jog +x by the default X distance
- *       'o'       jog up (-z) by the default Z distance
- *       'l'       jog down (+z) by the default Z distance
+ *       'o'       jog up (+z) by the default Z distance
+ *       'l'       jog down (-z) by the default Z distance
  *       '0'       vacuum off
  *       '1'       vacuum on
  *
