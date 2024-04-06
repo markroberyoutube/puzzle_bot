@@ -213,3 +213,43 @@ class GripperSerial(SerialBase):
     def get_cfg(self) -> float:
         """Get the current gripper angle."""
         raise NotImplementedError()
+
+
+class BluefruitSerial(SerialBase):
+    """"The Bluefruit serial driver.
+    
+    Parameters
+    ----------
+    name
+        The user friendly name of this port.
+    port_id
+        The port id for this port.
+    baud_rate
+        The baud rate to communicate at.
+    timeout
+        The timeout for this port (s).
+    """
+    def __init__(
+            self,
+            port_id: str = "VID:PID=239A:800C",
+            baud_rate: int = 115200,
+            timeout:int = 1) -> None:
+        super().__init__(
+            name="Bluefruit",
+            port_id=port_id,
+            baud_rate=baud_rate,
+            timeout=timeout)
+    
+    def start(self) -> None:
+        """Start the driver."""
+        super().start()
+    
+    def stop(self) -> None:
+        """Stop the driver."""
+        super().stop()
+    
+    def capture(self, sleep_time: float = 3.0) -> None:
+        """Capture an image."""
+        if self._port is not None:
+            self._port.write(bytearray("+\n", "ascii"))
+            time.sleep(sleep_time)
