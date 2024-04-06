@@ -1,5 +1,14 @@
 """Constants for the application"""
 
+from enum import Enum, auto 
+
+
+class Response(Enum):
+    """Response types used throughout the application"""
+    SUCCESS = auto()
+    ERROR = auto()
+    TIMEOUT = auto()
+    
 # The z coordinate directly above the pick location
 PICK_Z_COORDINATE_0 = 125000
 

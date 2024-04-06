@@ -1,21 +1,19 @@
-
-import logging
+import time, sys, logging
 import serial
 from serial.tools import list_ports
-import sys
-import time
-
-from constants import Z_HIGH, Z_LOW, Z_MEDIUM
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, QEventLoop
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
 
-class SerialBase:
+class SerialBase(QThread):
     """"Base serial driver class.
 
     Parameters
     ----------
+    parent
+        The main thread that created this one, used to prevent unwanted garbage collection
     name
         The user friendly name of this port.
     port_id
@@ -23,206 +21,134 @@ class SerialBase:
     baud_rate
         The baud rate to communicate at.
     timeout
-        The timeout for this port.
+        The read timeout for this port (None for no timeout, 0 for non-blocking read)
     """
-    def __init__(
-            self,
-            name: str,
-            port_id: str,
-            baud_rate: int,
-            timeout: float):
+    
+    # Define QT Signals for inter-process communication
+    port_opened = pyqtSignal(bool)
+    line_received = pyqtSignal(str)
+    line_ready_to_transmit = pyqtSignal(str)
+    thread_closing = pyqtSignal()
+    
+    def __init__(self, parent, name, port_id, baud_rate, timeout):
+        # Superclass initializer
+        QThread.__init__(self, parent)
+        
+        # Connect signals for inter-process communication
+        self.line_ready_to_transmit.connect(self.writeline)
+        self.thread_closing.connect(self.exit_thread)
+        
+        # Set to True to cause the Thread's main run loop to exit
+        self._thread_exiting = False
+        
+        # Set instance properties
         self.name = name
         self.port_id = port_id
         self.baud_rate = baud_rate
         self.timeout = timeout
-
-        self._com_port: str | None = None
+        self._com_port = None
         self._port = None
+        self._thread = None
+        self._write_callback = None
 
-    def start(self) -> None:
-        """"Start the driver."""
+    @pyqtSlot()
+    def exit_thread(self):
+        """Emit to this slot to stop this thread."""
+        # Ask the main run loop to exit
+        self._thread_exiting = True
+        if self._port is not None:
+            self._port.cancel_read() # Cancel the blocking read call in the main run loop
+
+    @pyqtSlot(str)
+    def writeline(self, line):
+        self._port.write(bytes(line.strip(), 'ascii') + b"\n")
+
+    def run(self):
+        """"Open the serial port and start the reader thread. Called by QTThread.start()"""
+        # Look through usb com ports to try to find the VID:PID specified in the 'port_id' parameter
         ports = list_ports.comports()
         for p in ports:
             if self.port_id in p.usb_info():
-                print(f"Found {self.port_id}")
+                logging.debug(f"[SerialBase.run] Found {self.name} port: {self.port_id}")
                 self._com_port = p.device
         
         if self._com_port is None:
-            sys.exit(f"Unable to find {self.name} port with name: {self.port_id}")
+            logging.error(f"[SerialBase.run] Unable to find {self.name} port with id: {self.port_id}")
+            self.port_opened.emit(False) # Let other threads know port could not be opened
+            return
         
+        # If we found our desired com port, try to open it
         if self._port is None:
-            print(f"Trying to establish serial connection for {self.name} at baud: {self.baud_rate}")
-            self._port = serial.Serial(
-                port=self._com_port,
-                baudrate=self.baud_rate,
-                timeout=self.timeout)
-            print(f"Successfully connected to {self.name}")
-            if self._port.closed:
-                self._port.open()
-    
-    def stop(self) -> None:
-        """Stop the driver."""
-        if self._port is not None:
-            self._port.close()
-            self._port = None
+            logging.debug(f"[SerialBase.run] Trying to open {self.name} port at baud: {self.baud_rate}")
+            try:
+                # Connect to and configure the com port
+                self._port = serial.Serial(
+                    port = self._com_port, 
+                    baudrate = self.baud_rate, 
+                    timeout = self.timeout
+                )
+                self._port.bytesize = serial.EIGHTBITS # 8 bits per byte
+                self._port.parity = serial.PARITY_NONE # No parity bit
+                self._port.stopbits = serial.STOPBITS_ONE # One stop bit
+                self._port.xonxoff = False # Disable software flow control
+                self._port.rtscts = False # Disable hardware (RTS/CTS) flow control
+                self._port.dsrdtr = False # Disable hardware (DSR/DTR) flow control
+                self._port.writeTimeout = 2 # Timeout for write
+            except Exception as error:
+                logging.error(f"[SerialBase.run] Unable to open {self.name} port: {error}")
+                self.port_opened.emit(False) # Let other threads know port could not be opened
+                return
+            else:
+                # If for some reason the port didn't open, then open it
+                if self._port.closed:
+                    self._port.open()
+                # Sleep 2 seconds to allow the micro-controller to reset
+                loop = QEventLoop()
+                QTimer.singleShot(2000, loop.quit)
+                loop.exec_()
+                # Let the app know the serial port is now opened
+                logging.debug(f"[SerialBase.run] Successfully connected to {self.name} port")
+                self.port_opened.emit(True) # Let other threads know port opened successfully
+                # Finally, start a loop to process incoming messages
+                while (not self._thread_exiting):
+                    line = self._port.readline().decode('ascii').strip()
+                    self.line_received.emit(line)
+                # When thread is exiting, close the serial port
+                self._port.close()
+        
 
-
-class TeknicSerial(SerialBase):
-    """"The Teknic serial driver.
+class ClearCore(SerialBase):
+    """"The Teknic ClearCore Puzzle Robot serial driver.
     
     Parameters
     ----------
-    name
-        The user friendly name of this port.
+    parent
+        The main thread that created this one, used to prevent unwanted garbage collection
     port_id
         The port id for this port.
     baud_rate
-        The baud rate to communicate at.
+        The baud rate to communicate at. Default is 9600 baud
     timeout
-        The timeout for this port (s).
+        The timeout for this port (s). Default is None (wait forever for data to arrive)
     """
-    def __init__(
-            self,
-            port_id: str = "VID:PID=2890:8022",
-            baud_rate: int = 9600,
-            timeout: float = 1.0) -> None:
+    def __init__(self, parent=None, port_id="VID:PID=2890:8022", baud_rate=9600, timeout=None):
         super().__init__(
-            name="Teknic",
-            port_id=port_id,
-            baud_rate=baud_rate,
-            timeout=timeout)
-    
-    def start(self) -> None:
-        """Start the driver."""
-        super().start()
-    
-    def stop(self) -> None:
-        """Stop the driver."""
-        super().stop()
+            parent = parent,
+            name = "ClearCore",
+            port_id = port_id,
+            baud_rate = baud_rate,
+            timeout = timeout
+        )
 
-    def is_homed(self) -> bool:
-        """Check if the motors are homed.
-        
-        Returns
-        -------
-        bool
-            True if the motors are homed. False, otherwise.
-        """
-        raise NotImplementedError()
-
-    def set_vacuum_state(self, state: bool) -> None:
-        """Set the vacuum state.
-        
-        Parameters
-        ----------
-        state
-            If True, the vacuum is engaged.
-            If False, it is disengaged.
-        """
-        if self._port is not None:
-            print(f"Setting vacuum state: {state}")
-            self._port.write(bytearray(f"{int(state)}\n", "ascii"))
-    
-    def get_cfg(self) -> list[int]:
-        """"Get the current motor configuration.
-        
-        Returns
-        -------
-        A list containing the current motor counts.
-        """
-        raise NotImplementedError()  # TODO: Implement this.
-
-    def move_absolute(
-            self,
-            x: int | None = None,
-            y: int | None = None,
-            z: int | None = None,
-            sleep_time: float = 0.1) -> None:
-        """Move absolute in the world frame.
-
-        Parameters
-        ----------
-        x
-            The x value to move by (motor counts).
-        y
-            The x value to move by (motor counts).
-        z
-            The x value to move by (motor counts).
-        sleep_time
-            The time to sleep after an axis move (s).
-        """
-        if self._port is not None:
-            if x is not None or y is not None:
-                self._port.write(bytearray("m\n", "ascii"))
-                time.sleep(sleep_time)
-                if x is not None:
-                    print(f"Moving x to {x}")
-                    self._port.write(bytearray("%s\n" % x, "ascii"))  ### need help sending int
-                    time.sleep(sleep_time)
-                if y is not None:
-                    print(f"Moving y to {y}")
-                    self._port.write(bytearray("%s\n" % y, "ascii"))  ### need help sending int
-                    time.sleep(sleep_time)
-            if z is not None:
-                print(f"Moving z to {z}")
-                self._port.write(bytearray("z\n", "ascii"))
-                time.sleep(sleep_time)
-                self._port.write(bytearray("%s\n" % z, "ascii"))  ### need help sending int
-                time.sleep(sleep_time)
-        
-        # TODO: Implement proper response handling
-        while self._port.in_waiting:
-            print(self._port.readline())
-
-        # TODO: Implement move done feedback.
-    
-    def move_forward(self, sleep_time: float = 3.0) -> None:
-        if self._port is not None:
-            self._port.write(bytearray("c\n", "ascii"))
-            time.sleep(sleep_time)
-
-    def move_backward(self, sleep_time: float = 3.0) -> None:
-        if self._port is not None:
-            self._port.write(bytearray("v\n", "ascii"))
-            time.sleep(sleep_time)
-
-    def move_high(self, sleep_time: float = 0.1) -> None:
-        """Move to a high pose.
-        
-        Parameters
-        ----------
-        sleep_time
-            The amount of time to sleep after the move (s).
-        """
-        self.move_absolute(x=None, y=None, z=Z_HIGH, sleep_time=sleep_time)
-    
-    def move_medium(self, sleep_time=0.1) -> None:
-        """Move to a medium pose.
-        
-        Parameters
-        ----------
-        sleep_time
-            The amount of time to sleep after the move (s).
-        """
-        self.move_absolute(x=None, y=None, z=Z_MEDIUM, sleep_time=sleep_time)
-    
-    def move_low(self, sleep_time: float = 0.1) -> None:
-        """Move to a low pose.
-        
-        Parameters
-        ----------
-        sleep_time
-            The amount of time to sleep after the move (s).
-        """
-        self.move_absolute(x=None, y=None, z=Z_LOW, sleep_time=sleep_time)
-    
-    def toggle_verbose(self, sleep_time: float = 0.1) -> None:
-        
-        if self._port is not None:
-            print(f"Toggling Verbose")
-            self._port.write(bytearray("m\n", "ascii"))
-            time.sleep(sleep_time)
-
+class DummyClearCore(ClearCore):
+    """Connect to a Arduino Uno that's acting as a dummy ClearCore for testing"""
+    def __init__(self, parent=None, port_id="VID:PID=2341:0043", baud_rate=9600, timeout=None):
+        super().__init__(
+            parent = parent,
+            port_id = port_id,
+            baud_rate = baud_rate,
+            timeout = timeout
+        )
 
 class GripperSerial(SerialBase):
     """"The Gripper serial driver.
@@ -328,39 +254,39 @@ class BluefruitSerial(SerialBase):
             self._port.write(bytearray("+\n", "ascii"))
             time.sleep(sleep_time)
 
-
-if __name__ == '__main__':
-    logger.setLevel(logging.DEBUG)
-
-    # Test Gripper.
-    gripper = GripperSerial()
-    gripper.start()
-    input("Press a key to rotate the gripper to 0.")
-    gripper.rotate(0.0)
-    input("Press a key to rotate the gripper to 180.")
-    gripper.rotate(180.0)
-    input("Press a key to rotate the gripper to 90.")
-    gripper.rotate(90.0)
-    gripper.stop()
-
-    # Test Bluefruit.
-    bluefruit = BluefruitSerial()
-    bluefruit.start()
-    input("Press a key to capture a photo.")
-    bluefruit.capture()
-    bluefruit.stop()
-
-    # Test Teknic.
-    teknik = TeknicSerial()
-    teknik.start()
-    input("Press a key to move x to 1000")
-    teknik.move_absolute(x=10000)
-    input("Press a key to move y to 1000")
-    teknik.move_absolute(y=10000)
-    input("Press a key to move to z low")
-    teknik.move_low()
-    input("Press a key to move to z medium")
-    teknik.move_medium()
-    input("Press a key to move to z high")
-    teknik.move_high()
-    teknik.stop()
+#
+# if __name__ == '__main__':
+#     logger.setLevel(logging.DEBUG)
+#
+#     # Test Gripper.
+#     gripper = GripperSerial()
+#     gripper.start()
+#     input("Press a key to rotate the gripper to 0.")
+#     gripper.rotate(0.0)
+#     input("Press a key to rotate the gripper to 180.")
+#     gripper.rotate(180.0)
+#     input("Press a key to rotate the gripper to 90.")
+#     gripper.rotate(90.0)
+#     gripper.stop()
+#
+#     # Test Bluefruit.
+#     bluefruit = BluefruitSerial()
+#     bluefruit.start()
+#     input("Press a key to capture a photo.")
+#     bluefruit.capture()
+#     bluefruit.stop()
+#
+#     # Test Teknic.
+#     teknik = TeknicSerial()
+#     teknik.start()
+#     input("Press a key to move x to 1000")
+#     teknik.move_absolute(x=10000)
+#     input("Press a key to move y to 1000")
+#     teknik.move_absolute(y=10000)
+#     input("Press a key to move to z low")
+#     teknik.move_low()
+#     input("Press a key to move to z medium")
+#     teknik.move_medium()
+#     input("Press a key to move to z high")
+#     teknik.move_high()
+#     teknik.stop()
