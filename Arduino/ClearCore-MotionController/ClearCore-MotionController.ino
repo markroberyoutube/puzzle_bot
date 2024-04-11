@@ -536,6 +536,10 @@ bool processEStop() {
     for (uint8_t i = 0; i < motorCount; i++) {
       motor = motors[i];
       clearAlerts(motor);
+      // Also cycle 'enable' to clear faults
+      motor->EnableRequest(false);
+      Delay_ms(10);
+      motor->EnableRequest(true);  
     }
   }
 
