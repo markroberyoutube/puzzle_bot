@@ -55,7 +55,7 @@
 #include "ClearCore.h"
 
 // When true, will print debug statements to the serial port
-const bool debug = false;
+const bool debug = true;
 
 // Define which connector and pin the soft estop will use
 #define softStopConnector ConnectorDI6
