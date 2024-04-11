@@ -49,7 +49,6 @@ class SerialBase(QThread):
         self._com_port = None
         self._port = None
         self._thread = None
-        self._write_callback = None
 
     @pyqtSlot()
     def exit_thread(self):
