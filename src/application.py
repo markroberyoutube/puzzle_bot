@@ -79,9 +79,9 @@ class Ui(QMainWindow):
         red = "#ff3300"
         green = "#009900"
         if status in ["SUCCESS", "GO"]:
-            html_line += f"<font style='color: {green};'>{status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {green};'>{status}:</font> {message}<br />"
         else:
-            html_line += f"<font style='color: {red};'>{status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {red};'>{status}:</font> {message}<br />"
         self.clearcore_serial_output_textarea.insertHtml(html_line)
 
     def set_clearcore_availability(self, enabled=True):
@@ -134,7 +134,7 @@ class Ui(QMainWindow):
         
         # Set all inputs as unavailable until we're connected to the ClearCore
         self.set_clearcore_availability(False)
-        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br/>")
+        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br />")
         
         # Connect to the ClearCore over serial
         self.clearcore = ClearCore(parent=self)
@@ -167,9 +167,9 @@ class Ui(QMainWindow):
         def on_port_open(port_status):
             if (port_status):
                 self.set_clearcore_availability(True)
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>ClearCore opened!</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>ClearCore opened!</font><br />")
             else:
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening ClearCore.</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening ClearCore.</font><br />")
         self.clearcore.port_opened.connect(on_port_open)
 
 def sigint_handler(*args):
