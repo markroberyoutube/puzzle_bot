@@ -137,8 +137,8 @@ class Ui(QMainWindow):
         self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br/>")
         
         # Connect to the ClearCore over serial
-        #self.clearcore = ClearCore(self.process_clearcore_response)
-        self.clearcore = DummyClearCore(parent=self)
+        self.clearcore = ClearCore(parent=self)
+        #self.clearcore = DummyClearCore(parent=self)
         self.clearcore.line_received.connect(self.process_clearcore_response)
         self.clearcore.start()
         

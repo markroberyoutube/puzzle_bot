@@ -131,7 +131,7 @@ class ClearCore(SerialBase):
     timeout
         The timeout for this port (s). Default is None (wait forever for data to arrive)
     """
-    def __init__(self, parent=None, port_id="VID:PID=2890:8022", baud_rate=9600, timeout=None):
+    def __init__(self, parent=None, port_id="VID:PID=2890:0022", baud_rate=9600, timeout=None):
         super().__init__(
             parent = parent,
             name = "ClearCore",
