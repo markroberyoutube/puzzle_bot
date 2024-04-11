@@ -55,7 +55,7 @@
 #include "ClearCore.h"
 
 // When true, will print debug statements to the serial port
-const bool debug = true;
+const bool debug = false;
 
 // Define which connector and pin the soft estop will use
 #define softStopConnector ConnectorDI6
@@ -185,11 +185,12 @@ bool processEStop();
  */
 
 void setup() {
+
   // Start serial communication and wait for it to open properly before continuing
   Serial.begin(baudRate);
   while (!Serial) {}
 
-  if (debug) { Serial.println("Setup has begun"); }
+  if (debug) { Serial.println("Serial is ready"); }
 
   // Set up the interrupt connector in digital input mode.
   // NOTE: The ClearCore manual clearly shows a pull-up resistor is always present,
