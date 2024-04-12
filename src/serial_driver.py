@@ -215,40 +215,29 @@ class GripperSerial(SerialBase):
 
 
 class BluefruitSerial(SerialBase):
-    """"The Bluefruit serial driver.
+    """"The The Bluefruit serial driver.
     
     Parameters
     ----------
-    name
-        The user friendly name of this port.
+    parent
+        The main thread that created this one, used to prevent unwanted garbage collection
     port_id
         The port id for this port.
     baud_rate
-        The baud rate to communicate at.
+        The baud rate to communicate at. Default is 115200 baud
     timeout
-        The timeout for this port (s).
+        The timeout for this port (s). Default is None (wait forever for data to arrive)
     """
-    def __init__(
-            self,
-            port_id: str = "VID:PID=239A:800C",
-            baud_rate: int = 115200,
-            timeout:int = 1) -> None:
+    def __init__(self, parent=None, port_id="VID:PID=239A:800C", baud_rate=115200, timeout=None):
         super().__init__(
-            name="Bluefruit",
-            port_id=port_id,
-            baud_rate=baud_rate,
-            timeout=timeout)
+            parent = parent,
+            name = "Bluefruit",
+            port_id = port_id,
+            baud_rate = baud_rate,
+            timeout = timeout
+        )
     
-    def start(self) -> None:
-        """Start the driver."""
-        super().start()
-    
-    def stop(self) -> None:
-        """Stop the driver."""
-        super().stop()
-    
-    def capture(self, sleep_time: float = 3.0) -> None:
-        """Capture an image."""
-        if self._port is not None:
-            self._port.write(bytearray("+\n", "ascii"))
-            time.sleep(sleep_time)
+    def capture(self, sleep_time=3.0):
+        """Trigger the shutter."""
+        self.writeline("+")
+        time.sleep(sleep_time)
