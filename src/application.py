@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys, os, threading, time, signal
-import exif, json, math
+import exif, json, math, argparse
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread 
@@ -39,11 +39,15 @@ class Ui(QMainWindow):
         self.serpentine_paused = None
         
         # Open configuration file
-        if len(argv) < 2:
-            logging.error(f"[Ui.init] Config file not specified in arguments: {argv}")
+        try:
+            parser = argparse.ArgumentParser(description="Puzzle Bot GUI Application", exit_on_error=False)
+            parser.add_argument('config_file', help='JSON file representing runtime configuration')
+            args = parser.parse_args()
+            self.config_file_path = args.config_file
+        except argparse.ArgumentError as e:
+            logging.error(f"[Ui.init] Config file not specified in arguments: {e}")
             self.close()
             return
-        self.config_file_path = argv[1]
         if not os.path.exists(self.config_file_path):
             logging.debug(f"[Ui.init] Creating config file at: {self.config_file_path}")
             self.config = {}
@@ -457,6 +461,16 @@ class Ui(QMainWindow):
         batch_info['photos'].append(
             dict(file_name=file_name, position=position)
         )
+        
+        # Ensure runtime parameters are saved in the JSON file as well
+        batch_info['start_x'] = self.start_x_textbox.text()
+        batch_info['start_y'] = self.start_y_textbox.text()
+        batch_info['start_z'] = self.start_z_textbox.text()
+        batch_info['end_x'] = self.end_x_textbox.text()
+        batch_info['end_y'] = self.end_y_textbox.text()
+        batch_info['end_z'] = self.end_z_textbox.text()
+        batch_info['overlap_x'] = self.overlap_x_textbox.text()
+        batch_info['overlap_y'] = self.overlap_y_textbox.text()
         
         # Write the JSON file back to disk
         with open(batch_info_file, "w") as jsonfile:
