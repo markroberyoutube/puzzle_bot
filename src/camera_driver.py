@@ -1,4 +1,4 @@
-import time, sys, os, logging, subprocess, shlex
+import time, sys, os, logging, subprocess
 from datetime import datetime
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, QEventLoop
 
@@ -42,16 +42,16 @@ class GalaxyS24(QThread):
 
     def adb(self, command, delay_ms_after=0):
         """Issue an adb command and return a (retcode, stdout) tuple"""
-        logging.debug(shlex.split(command))
-        results = subprocess.run(shlex.split(command), capture_output=True, shell=True)
+        logging.debug(command)
+        results = subprocess.run(command, capture_output=True, shell=True)
         if results.returncode != 0:
-            logging.error(f"[GalaxyS24.adb] Error running {command}: {results.stderr}")
+            logging.error(f"[GalaxyS24.adb] Error running {command}: {results.stderr}\n{results.stdout}")
             return (False, results.stdout)
         else:
             self.msleep(delay_ms_after) # Delay using QThread's sleep
             return (True, results.stdout)
 
-    @pyqtSlot()
+    @pyqtSlot(str)
     def capture_photo(self, batch_dir=None):
         """Capture a photo and save it to batch_dir with a timestamped filename"""
         
@@ -105,7 +105,7 @@ class GalaxyS24(QThread):
         if not self.adb("adb shell input tap 534 2006", 2000)[0]: return
 
         # Find the most recently taken photo
-        retcode, stdout = self.adb("adb shell ls -clr /sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \\'{print $NF}\\'", 0)
+        retcode, stdout = self.adb("adb shell ls -clr /sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
         if not retcode: return
         remote_photo_path = stdout.decode('ascii').strip()
         remote_file_name = os.path.split(remote_photo_path)[-1]
@@ -118,7 +118,7 @@ class GalaxyS24(QThread):
         # Let other threads know a new photo has been captured
         self.photo_captured.emit(local_photo_path)
     
-    @pyqtSlot()
+    @pyqtSlot(str)
     def capture_screenshot(self, screenshot_dir):
         """Capture a screenshot and save it to screenshot_dir with a timestamped filename"""
         
@@ -140,7 +140,7 @@ class GalaxyS24(QThread):
         """Main thread loop"""
         
         # Ensure ADB can speak to the GalaxyS24 by running a shell no-op command (":")
-        results = subprocess.run(shlex.split("adb shell :"), capture_output=True)
+        results = subprocess.run("adb shell :", capture_output=True, shell=True)
         if results.returncode != 0:
             logging.error(f"[GalaxyS24.run] Could not connect over ADB: {results.stderr}")
             self.device_connected.emit(False)

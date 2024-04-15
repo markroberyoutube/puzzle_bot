@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import sys, os, threading, time, signal
-import exif, json, math, argparse
+import exif, json, math, argparse, tempfile
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread 
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, Qt
 from PyQt5.QtGui import QPixmap, QTransform
 from PyQt5 import QtTest
 
@@ -37,6 +37,7 @@ class Ui(QMainWindow):
         self.clearcore = None
         self.serpentine_move_finished = None
         self.serpentine_paused = None
+        self.photo_capture_finished = None
         
         # Open configuration file
         try:
@@ -333,6 +334,7 @@ class Ui(QMainWindow):
             for x in x_steps:
                 # Update status bar
                 self.statusBar().showMessage("Taking picture {num_photos_taken} of {total_photos} at {x},{y},{z}")
+                
                 # Set up callback to wait for move to finish
                 self.serpentine_move_finished = False
                 @pyqtSlot(str)
@@ -341,17 +343,37 @@ class Ui(QMainWindow):
                     self.clearcore.line_received.disconnect(on_response)
                     # Let the main thread know the move has finished
                     self.serpentine_move_finished = True
+                
                 # Connect the callback
                 self.clearcore.line_received.connect(on_response)
+                
                 # Send command to begin moving to the desired location
                 self.send_clearcore_command(f"m {x},{y},{z}")
+                
                 # Wait for move to finish
                 while not self.serpentine_move_finished:
                     QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+                
                 # Wait 1 second for machine vibrations to stop
                 QtTest.QTest.qWait(1000)
-                # Take photo
+                
+                # Set up callback to wait for photo capture to finish
+                self.photo_capture_finished = False
+                @pyqtSlot(str)
+                def on_capture(image_path):
+                    # Remove this callback
+                    self.camera.photo_captured.disconnect(on_capture)
+                    # Let the main thread know the move has finished
+                    self.photo_capture_finished = True
+                self.camera.photo_captured.connect(on_capture)
+                
+                # Trigger a photo to be taken
                 self.take_photo((x,y,z), batch_dir)
+                
+                # Wait for the capture to finish
+                while not self.photo_capture_finished:
+                    QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
         
@@ -403,16 +425,18 @@ class Ui(QMainWindow):
         """Display a screenshot in the designated label area"""
         
         # Create a QPixmap from the image data
-        logging.debug(f"[Ui.show_screenshot] Showing screenshot: {path}")
+        logging.debug(f"[Ui.show_screenshot] Showing screenshot: {image_path}")
         try:
             pixmap = QPixmap(image_path)
         except Exception as e:
             logger.error(f"[Ui.show_screenshot] Could not open screenshot at {image_path}: {e}")
             return
             
-        # Display the QPixmap in the label area
-        label_area.setPixmap(pixmap)
-        label_area.setScaledContents(True)
+        # Display the QPixmap in the label area, scaled and centered
+        pixmap = pixmap.scaledToHeight(self.screenshot_label.height(), Qt.SmoothTransformation)
+        self.screenshot_label.setPixmap(pixmap)
+        self.screenshot_label.setAlignment(Qt.AlignCenter)
+        #self.screenshot_label.setScaledContents(True)
 
     def take_photo(self, position, batch_dir):
         """Take a photo using the Galaxy S24, store it in batch_dir, and display it along with its x,y,z position tuple"""
@@ -430,18 +454,18 @@ class Ui(QMainWindow):
         
         # Set up a callback to display the photo once it has been taken
         @pyqtSlot(str)
-        def on_photo(image_path):
+        def on_capture(image_path):
             # Remove this callback
-            self.camera.photo_captured.disconnect(on_photo)
+            self.camera.photo_captured.disconnect(on_capture)
             # Display the screenshot
             x,y,z = position
             caption = f"{x}, {y}"
             self.show_photo(image_path, caption)
             # Save photo info in the batch json file
             self.save_photo_info(image_path, position, batch_dir)
-        self.camera.photo_captured.connect(on_photo)
+        self.camera.photo_captured.connect(on_capture)
         
-        # Finally, trigger the photo to be taken
+        # Trigger the photo to be taken
         self.camera.trigger_photo.emit(batch_dir)
 
     def save_photo_info(self, image_path, position, batch_dir):
@@ -480,11 +504,11 @@ class Ui(QMainWindow):
         """Display an photo in the designated label area, labeled with the supplied caption"""
 
         # Create a QPixmap from the image data
-        logging.debug(f"[Ui.show_image] Showing image path: {path}")
+        logging.debug(f"[Ui.show_image] Showing image path: {image_path}")
         try:
             pixmap = QPixmap(image_path)
         except Exception as e:
-            logger.error(f"[Ui.show_image] Could not open photo at {path}: {e}")
+            logger.error(f"[Ui.show_image] Could not open photo at {image_path}: {e}")
             return
 
         # If exif orientation information exists, rotate QPixmap accordingly
@@ -506,16 +530,16 @@ class Ui(QMainWindow):
             pass
 
         # If a photo is already present in the "current" photo label, move it to the "prior" photo label
-        if current_photo_label.pixmap() is not None:
-            prior_photo_label.setPixmap(current_photo_label.pixmap())
-            prior_photo_label.setScaledContents(True)
-            prior_photo_caption_label.setText(current_photo_caption_label.text())
+        if self.current_photo_label.pixmap() is not None:
+            self.prior_photo_label.setPixmap(self.current_photo_label.pixmap())
+            self.prior_photo_label.setScaledContents(True)
+            self.prior_photo_caption_label.setText(self.current_photo_caption_label.text())
 
         # Display the image and caption in the "current" photo label area
-        current_photo_label.setPixmap(pixmap)
-        current_photo_label.setScaledContents(True)
+        self.current_photo_label.setPixmap(pixmap)
+        self.current_photo_label.setScaledContents(True)
         image_filename = os.path.split(image_path)[-1]
-        current_photo_caption_label.setText(f"{image_filename} ({caption})")
+        self.current_photo_caption_label.setText(f"{image_filename} ({caption})")
 
 
 def sigint_handler(*args):
