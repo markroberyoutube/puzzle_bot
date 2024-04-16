@@ -40,12 +40,13 @@ class GalaxyS24(QThread):
         # Ask the main run loop to exit
         self._thread_exiting = True
 
-    def adb(self, command, delay_ms_after=0):
+    def adb(self, command, delay_ms_after=0, log_error=True):
         """Issue an adb command and return a (retcode, stdout) tuple"""
-        logging.debug(command)
+        logging.debug(f"[GalaxyS24.adb] running command: {command}")
         results = subprocess.run(command, capture_output=True, shell=True)
         if results.returncode != 0:
-            logging.error(f"[GalaxyS24.adb] Error running {command}: {results.stderr}\n{results.stdout}")
+            if log_error:
+                logging.error(f"[GalaxyS24.adb] Error running {command}: {results.stderr}\n{results.stdout}")
             return (False, results.stdout)
         else:
             self.msleep(delay_ms_after) # Delay using QThread's sleep
@@ -69,7 +70,7 @@ class GalaxyS24(QThread):
         if not self.adb("adb shell input tap 1 950", 0)[0]: return
         
         # Check to see if the camera app is running in the foreground
-        retcode, stdout = self.adb("adb shell dumpsys activity activities | grep mFocusedWindow | grep camera", 0)
+        retcode, stdout = self.adb("adb shell dumpsys activity activities | grep mFocusedWindow | grep camera", 0, False)
         # If camera app is not running, start it up
         if retcode:
             logging.debug("[GalaxyS24.capture_photo] Camera app is running...")

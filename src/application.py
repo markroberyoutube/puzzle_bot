@@ -284,6 +284,7 @@ class Ui(QMainWindow):
                 self.serpentine_start_button.clicked.connect(pause_serpentine_photos)    
             self.serpentine_start_button.clicked.connect(restart_serpentine_photos)
         self.serpentine_start_button.clicked.connect(pause_serpentine_photos)
+        self.serpentine_start_button.clicked.disconnect(self.take_serpentine_photos) # Disable default action
         
         # Make sure the photo directory exists
         photo_directory = self.photo_directory_textbox.text()
@@ -295,7 +296,7 @@ class Ui(QMainWindow):
         last_batch_number = 0
         sub_dirs = [d for d in os.listdir(photo_directory) if os.path.isdir(os.path.join(photo_directory, d))]
         batch_dirs = [d for d in sub_dirs if d.isnumeric()]
-        batch_dirs.sort() # sorts in place
+        batch_dirs.sort(key=int) # sorts in place
         if batch_dirs:
             last_batch_number = int(batch_dirs[-1])
         current_batch_number = last_batch_number + 1
