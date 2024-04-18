@@ -1,4 +1,4 @@
-import time, sys, logging
+import sys, logging
 import serial
 from serial.tools import list_ports
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, QEventLoop
@@ -211,32 +211,3 @@ class GripperSerial(SerialBase):
     def get_cfg(self) -> float:
         """Get the current gripper angle."""
         raise NotImplementedError()
-
-
-class BluefruitSerial(SerialBase):
-    """"The The Bluefruit serial driver.
-    
-    Parameters
-    ----------
-    parent
-        The main thread that created this one, used to prevent unwanted garbage collection
-    port_id
-        The port id for this port.
-    baud_rate
-        The baud rate to communicate at. Default is 115200 baud
-    timeout
-        The timeout for this port (s). Default is None (wait forever for data to arrive)
-    """
-    def __init__(self, parent=None, port_id="VID:PID=239A:800C", baud_rate=115200, timeout=None):
-        super().__init__(
-            parent = parent,
-            name = "Bluefruit",
-            port_id = port_id,
-            baud_rate = baud_rate,
-            timeout = timeout
-        )
-    
-    def capture(self, sleep_time=3.0):
-        """Trigger the shutter."""
-        self.writeline("+")
-        time.sleep(sleep_time)

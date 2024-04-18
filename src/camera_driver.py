@@ -1,6 +1,6 @@
-import time, sys, os, logging, subprocess
+import sys, os, logging, subprocess
 from datetime import datetime
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, QEventLoop
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)

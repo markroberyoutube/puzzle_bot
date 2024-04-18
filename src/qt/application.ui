@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1108</width>
-    <height>911</height>
+    <width>1301</width>
+    <height>915</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -36,7 +36,7 @@
   min-width: 50px; 
   min-height: 50px; 
 }
-QLabel, QPushButton {
+QLabel, QPushButton, QToolButton {
   font-size: 16px;
   qproperty-alignment: AlignCenter;
 }
@@ -60,7 +60,7 @@ QLineEdit {
        <enum>QTabWidget::North</enum>
       </property>
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <property name="elideMode">
        <enum>Qt::ElideRight</enum>
@@ -412,7 +412,7 @@ max-width: 100px;</string>
                   </widget>
                  </item>
                  <item row="2" column="0">
-                  <widget class="QLineEdit" name="lineEdit">
+                  <widget class="QLineEdit" name="gripper_angle_textbox">
                    <property name="styleSheet">
                     <string notr="true">min-width: 100px;
 max-width: 100px;</string>
@@ -435,7 +435,7 @@ max-width: 100px;</string>
                 </spacer>
                </item>
                <item>
-                <widget class="QPushButton" name="pushButton">
+                <widget class="QPushButton" name="rotate_gripper_button">
                  <property name="text">
                   <string>ROT. ABS.</string>
                  </property>
@@ -501,7 +501,7 @@ max-width: 100px;</string>
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabSerpentinePhotos">
+      <widget class="QWidget" name="tab_serpentine_photos">
        <attribute name="title">
         <string>SERPENTINE PHOTOS</string>
        </attribute>
@@ -533,7 +533,7 @@ max-width: 100px;</string>
                 </widget>
                </item>
                <item row="1" column="1">
-                <widget class="QPushButton" name="photo_directory_browse_button">
+                <widget class="QPushButton" name="puzzle_photo_directory_browse_button">
                  <property name="styleSheet">
                   <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
                  </property>
@@ -550,7 +550,7 @@ max-width: 100px;</string>
                 </widget>
                </item>
                <item row="1" column="0">
-                <widget class="QLineEdit" name="photo_directory_textbox">
+                <widget class="QLineEdit" name="serpentine_photo_directory_textbox">
                  <property name="alignment">
                   <set>Qt::AlignCenter</set>
                  </property>
@@ -897,6 +897,9 @@ max-width: 300px;
 min-height: 400px;
 max-height: 400px;</string>
               </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
               <property name="text">
                <string>Prior Photo Appears Here</string>
               </property>
@@ -943,6 +946,742 @@ max-height: 400px;</string>
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tab_calibrate_camera">
+       <attribute name="title">
+        <string>CAMERA CALIBRATION</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_11">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_17">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_10" stretch="1,8,1">
+            <item>
+             <spacer name="horizontalSpacer_7">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QFrame" name="verticalFrame_2">
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Sunken</enum>
+              </property>
+              <property name="lineWidth">
+               <number>1</number>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout">
+               <item>
+                <widget class="QLabel" name="label_32">
+                 <property name="text">
+                  <string>CAMERA CALIBRATION TARGET PARAMETERS</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QGridLayout" name="gridLayout_15" columnstretch="1,1,1,1">
+                 <item row="0" column="1">
+                  <widget class="QLabel" name="label_29">
+                   <property name="text">
+                    <string>CHECKERBOARD COLUMNS</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QSpinBox" name="camera_calibration_checker_columns_spinbox"/>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QLabel" name="label_30">
+                   <property name="text">
+                    <string>CHECKER WIDTH (mm)</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QSpinBox" name="camera_calibration_checker_rows_spinbox"/>
+                 </item>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_28">
+                   <property name="text">
+                    <string>CHECKERBOARD ROWS</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="2">
+                  <widget class="QLineEdit" name="camera_calibration_checker_width_textbox"/>
+                 </item>
+                 <item row="0" column="3">
+                  <widget class="QLabel" name="label_31">
+                   <property name="text">
+                    <string>CHECKER HEIGHT (mm)</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="3">
+                  <widget class="QLineEdit" name="camera_calibration_checker_height_textbox"/>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_6">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_9" stretch="3,1,1">
+            <item>
+             <widget class="QFrame" name="verticalFrame_5">
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Sunken</enum>
+              </property>
+              <property name="lineWidth">
+               <number>1</number>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_20">
+               <item>
+                <layout class="QGridLayout" name="gridLayout_22">
+                 <item row="1" column="0">
+                  <widget class="QLineEdit" name="pre_camera_calibration_photo_textbox">
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_26">
+                   <property name="text">
+                    <string>PRE-CALIBRATION EXAMPLE PHOTO</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QPushButton" name="pre_camera_calibration_photo_browse_button">
+                   <property name="styleSheet">
+                    <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
+                   </property>
+                   <property name="text">
+                    <string>...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_14">
+                 <item>
+                  <layout class="QVBoxLayout" name="verticalLayout_18">
+                   <item>
+                    <widget class="QLabel" name="label_25">
+                     <property name="text">
+                      <string>RMS Error</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLineEdit" name="pre_camera_calibration_rms_error_textbox">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>auto-filled</string>
+                     </property>
+                     <property name="alignment">
+                      <set>Qt::AlignCenter</set>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QVBoxLayout" name="verticalLayout_19">
+                   <item>
+                    <widget class="QLabel" name="label_27">
+                     <property name="text">
+                      <string>Max Error</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLineEdit" name="pre_camera_calibration_max_error_textbox">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>auto-filled</string>
+                     </property>
+                     <property name="alignment">
+                      <set>Qt::AlignCenter</set>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="pre_camera_calibration_measure_error_button">
+                   <property name="styleSheet">
+                    <string notr="true">min-height: 95px;
+min-width: 95px;	</string>
+                   </property>
+                   <property name="text">
+                    <string>MEASURE
+ERROR ▶️</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="pre_camera_calibration_example_photo_label">
+              <property name="styleSheet">
+               <string notr="true">min-width: 280px;
+max-width: 280px;
+min-height: 210px;
+max-height: 210px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="text">
+               <string>EXAMPLE
+PHOTO</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="pre_camera_calibration_error_visualization_label">
+              <property name="styleSheet">
+               <string notr="true">min-width: 280px;
+max-width: 280px;
+min-height: 210px;
+max-height: 210px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="text">
+               <string>ERROR
+VISUALIZATION
+</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QFrame" name="verticalFrame_5">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <property name="lineWidth">
+             <number>1</number>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_21">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_12">
+               <item>
+                <widget class="QFrame" name="gridFrame_8">
+                 <property name="frameShape">
+                  <enum>QFrame::NoFrame</enum>
+                 </property>
+                 <property name="frameShadow">
+                  <enum>QFrame::Sunken</enum>
+                 </property>
+                 <layout class="QGridLayout" name="gridLayout_20" columnstretch="20,0,0,0">
+                  <item row="1" column="1">
+                   <widget class="QPushButton" name="camera_calibration_photo_directory_browse_button">
+                    <property name="styleSheet">
+                     <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
+                    </property>
+                    <property name="text">
+                     <string>...</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="2">
+                   <widget class="QLabel" name="label_50">
+                    <property name="text">
+                     <string>RMS Error</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QLineEdit" name="camera_calibration_photo_directory_textbox">
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QLabel" name="label_51">
+                    <property name="text">
+                     <string>CALIBRATION PHOTO DIRECTORY</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="2">
+                   <widget class="QLineEdit" name="camera_calibration_rms_error_textbox">
+                    <property name="enabled">
+                     <bool>false</bool>
+                    </property>
+                    <property name="text">
+                     <string>auto-filled</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="3">
+                   <widget class="QLabel" name="label_52">
+                    <property name="text">
+                     <string>Max Error</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="3">
+                   <widget class="QLineEdit" name="camera_calibration_max_error_textbox">
+                    <property name="enabled">
+                     <bool>false</bool>
+                    </property>
+                    <property name="text">
+                     <string>auto-filled</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QToolButton" name="camera_calibration_button">
+                 <property name="styleSheet">
+                  <string notr="true">min-height: 50px;
+min-width: 95px;	</string>
+                 </property>
+                 <property name="text">
+                  <string>CALIBRATE
+CAMERA ▶️</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_13">
+               <item>
+                <widget class="QFrame" name="verticalFrame_3">
+                 <property name="frameShape">
+                  <enum>QFrame::NoFrame</enum>
+                 </property>
+                 <property name="frameShadow">
+                  <enum>QFrame::Sunken</enum>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_16">
+                  <item>
+                   <widget class="QLabel" name="label_45">
+                    <property name="text">
+                     <string>CAMERA CALIBRATION MATRIX</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QGridLayout" name="gridLayout_18">
+                    <item row="1" column="1">
+                     <widget class="QLineEdit" name="camera_fy_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="3">
+                     <widget class="QLineEdit" name="camera_cy_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="2">
+                     <widget class="QLabel" name="label_40">
+                      <property name="text">
+                       <string>c_x</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="3">
+                     <widget class="QLabel" name="label_41">
+                      <property name="text">
+                       <string>c_y</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="2">
+                     <widget class="QLineEdit" name="camera_cx_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="0">
+                     <widget class="QLabel" name="label_44">
+                      <property name="text">
+                       <string>f_x</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="1">
+                     <widget class="QLabel" name="label_39">
+                      <property name="text">
+                       <string>f_y</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="0">
+                     <widget class="QLineEdit" name="camera_fx_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QFrame" name="verticalFrame_2">
+                 <property name="frameShape">
+                  <enum>QFrame::NoFrame</enum>
+                 </property>
+                 <property name="frameShadow">
+                  <enum>QFrame::Sunken</enum>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_15">
+                  <item>
+                   <widget class="QLabel" name="label_46">
+                    <property name="text">
+                     <string>CAMERA DISTORTION COEFFICIENTS</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QGridLayout" name="gridLayout_19">
+                    <item row="0" column="0">
+                     <widget class="QLabel" name="label_42">
+                      <property name="text">
+                       <string>k_1</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="1">
+                     <widget class="QLineEdit" name="camera_k2_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="2">
+                     <widget class="QLabel" name="label_49">
+                      <property name="text">
+                       <string>k_3</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="0">
+                     <widget class="QLineEdit" name="camera_k1_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="3">
+                     <widget class="QLabel" name="label_47">
+                      <property name="text">
+                       <string>p_1</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="1">
+                     <widget class="QLabel" name="label_43">
+                      <property name="text">
+                       <string>k_2</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="2">
+                     <widget class="QLineEdit" name="camera_k3_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="3">
+                     <widget class="QLineEdit" name="camera_p1_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="0" column="4">
+                     <widget class="QLabel" name="label_48">
+                      <property name="text">
+                       <string>p_2</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="4">
+                     <widget class="QLineEdit" name="camera_p2_textbox">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
+                      <property name="text">
+                       <string>auto-filled</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_16">
+            <item>
+             <widget class="QFrame" name="verticalFrame_7">
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Sunken</enum>
+              </property>
+              <property name="lineWidth">
+               <number>1</number>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_24">
+               <item>
+                <layout class="QGridLayout" name="gridLayout_14">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_37">
+                   <property name="text">
+                    <string>POST-CALIBRATION EXAMPLE PHOTO</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLineEdit" name="post_camera_calibration_photo_textbox">
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QPushButton" name="post_camera_calibration_photo_browse_button">
+                   <property name="styleSheet">
+                    <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
+                   </property>
+                   <property name="text">
+                    <string>...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_15">
+                 <item>
+                  <layout class="QVBoxLayout" name="verticalLayout_23">
+                   <item>
+                    <widget class="QLabel" name="label_38">
+                     <property name="text">
+                      <string>RMS Error</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLineEdit" name="post_camera_calibration_rms_error_textbox">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>auto-filled</string>
+                     </property>
+                     <property name="alignment">
+                      <set>Qt::AlignCenter</set>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QVBoxLayout" name="verticalLayout_22">
+                   <item>
+                    <widget class="QLabel" name="label_36">
+                     <property name="text">
+                      <string>MaxError</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLineEdit" name="post_camera_calibration_max_error_textbox">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>auto-filled</string>
+                     </property>
+                     <property name="alignment">
+                      <set>Qt::AlignCenter</set>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="post_camera_calibration_measure_error_button">
+                   <property name="styleSheet">
+                    <string notr="true">min-height: 95px;
+min-width: 95px;	</string>
+                   </property>
+                   <property name="text">
+                    <string>MEASURE
+ERROR ▶️</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="post_camera_calibration_example_photo_label">
+              <property name="styleSheet">
+               <string notr="true">min-width: 280px;
+max-width: 280px;
+min-height: 210px;
+max-height: 210px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="text">
+               <string>EXAMPLE
+PHOTO</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="post_camera_calibration_error_visualization_label">
+              <property name="styleSheet">
+               <string notr="true">min-width: 280px;
+max-width: 280px;
+min-height: 210px;
+max-height: 210px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Box</enum>
+              </property>
+              <property name="text">
+               <string>ERROR
+VISUALIZATION
+</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -953,7 +1692,7 @@ max-height: 400px;</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1108</width>
+     <width>1301</width>
      <height>37</height>
     </rect>
    </property>
@@ -988,15 +1727,59 @@ max-height: 400px;</string>
   <tabstop>vacuum_off_button</tabstop>
   <tabstop>jog_negative_x_button</tabstop>
   <tabstop>jog_positive_x_button</tabstop>
-  <tabstop>jog_negative_y_button</tabstop>
   <tabstop>jog_positive_y_button</tabstop>
-  <tabstop>jog_negative_z_button</tabstop>
+  <tabstop>jog_negative_y_button</tabstop>
   <tabstop>jog_positive_z_button</tabstop>
+  <tabstop>jog_negative_z_button</tabstop>
   <tabstop>move_x_textbox</tabstop>
   <tabstop>move_y_textbox</tabstop>
   <tabstop>move_z_textbox</tabstop>
   <tabstop>move_absolute_button</tabstop>
+  <tabstop>gripper_angle_textbox</tabstop>
+  <tabstop>rotate_gripper_button</tabstop>
   <tabstop>clearcore_serial_output_textarea</tabstop>
+  <tabstop>serpentine_photo_directory_textbox</tabstop>
+  <tabstop>puzzle_photo_directory_browse_button</tabstop>
+  <tabstop>batch_number_textbox</tabstop>
+  <tabstop>serpentine_start_button</tabstop>
+  <tabstop>start_x_textbox</tabstop>
+  <tabstop>start_y_textbox</tabstop>
+  <tabstop>start_z_textbox</tabstop>
+  <tabstop>end_x_textbox</tabstop>
+  <tabstop>end_y_textbox</tabstop>
+  <tabstop>end_z_textbox</tabstop>
+  <tabstop>overlap_x_textbox</tabstop>
+  <tabstop>overlap_y_textbox</tabstop>
+  <tabstop>screenshot_button</tabstop>
+  <tabstop>camera_calibration_checker_rows_spinbox</tabstop>
+  <tabstop>camera_calibration_checker_columns_spinbox</tabstop>
+  <tabstop>camera_calibration_checker_width_textbox</tabstop>
+  <tabstop>camera_calibration_checker_height_textbox</tabstop>
+  <tabstop>pre_camera_calibration_photo_textbox</tabstop>
+  <tabstop>pre_camera_calibration_photo_browse_button</tabstop>
+  <tabstop>pre_camera_calibration_rms_error_textbox</tabstop>
+  <tabstop>pre_camera_calibration_max_error_textbox</tabstop>
+  <tabstop>pre_camera_calibration_measure_error_button</tabstop>
+  <tabstop>camera_calibration_photo_directory_textbox</tabstop>
+  <tabstop>camera_calibration_photo_directory_browse_button</tabstop>
+  <tabstop>camera_calibration_rms_error_textbox</tabstop>
+  <tabstop>camera_calibration_max_error_textbox</tabstop>
+  <tabstop>camera_calibration_button</tabstop>
+  <tabstop>camera_fx_textbox</tabstop>
+  <tabstop>camera_fy_textbox</tabstop>
+  <tabstop>camera_cx_textbox</tabstop>
+  <tabstop>camera_cy_textbox</tabstop>
+  <tabstop>camera_k1_textbox</tabstop>
+  <tabstop>camera_k2_textbox</tabstop>
+  <tabstop>camera_k3_textbox</tabstop>
+  <tabstop>camera_p1_textbox</tabstop>
+  <tabstop>camera_p2_textbox</tabstop>
+  <tabstop>post_camera_calibration_photo_textbox</tabstop>
+  <tabstop>post_camera_calibration_photo_browse_button</tabstop>
+  <tabstop>post_camera_calibration_rms_error_textbox</tabstop>
+  <tabstop>post_camera_calibration_max_error_textbox</tabstop>
+  <tabstop>post_camera_calibration_measure_error_button</tabstop>
+  <tabstop>tab_widget</tabstop>
  </tabstops>
  <resources/>
  <connections/>
