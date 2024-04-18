@@ -1,5 +1,7 @@
 
-// Gripper rotation V4
+// Gripper rotation V6
+// Updated duty cycle readouts for PWM encoder digital output for Arduino Due
+// updated to support Arduino due
 // added RS485 communication
 // added incremental motion, and interrogate motor for homing
 // added ability to receive the amount of rotation in DEG [0-360] or counts [0-65536]
@@ -13,6 +15,7 @@
 #include <stdlib.h>
 #include "Arduino.h"
 //#include "RS485.h"
+#include "tc_lib.h"
 
 /*
 //RS485
@@ -25,6 +28,12 @@ RS485 rs485(&Serial, sendPin, deviceID);
 #define LENGTH 230
 #define Count_deg 182
 
+// Arduino Due Duty Cycle readout settings for the TC library
+#define CAPTURE_TIME_WINDOW 2500000 // usecs
+//IMPORTANT: Take into account that for TC0 (TC0 and channel 0) the TIOA0 is PB25, which is pin 2 for Arduino DUE
+capture_tc0_declaration();
+auto& capture_pin2=capture_tc0;
+
 byte tx_data[2];
 byte rx_data[6];
 int dev_addr = 0x50 >> 1; //JP1 in zero position => 7 bit address of 0x28
@@ -32,7 +41,7 @@ unsigned long start_micros = 0;
 unsigned int sin_array[LENGTH];
 unsigned int cos_array[LENGTH];
 unsigned int sector_array[LENGTH];
-unsigned int index = 0;
+unsigned int pindex = 0;
 unsigned int integerValue=0; 
 char incomingByte;
 char command[2]={0,0};
@@ -40,11 +49,11 @@ uint16_t angle = 0;
 int i=0;
 int encoderPin=A0; // encoder pin analog input
 int val=0;        // encoder readout
-const int pwmPin = 3;  // PWM pin where the signal is connected
+//const int pwmPin = 6;  // PWM pin where the signal is connected
 int dutyCycle = 0;
 //lights
-int pin_lightL = 1;
-int pin_lightR = 2;
+int pin_lightL = 50;
+int pin_lightR = 52;
 
 
 // declare functions
@@ -52,18 +61,27 @@ void TitanWrite(byte address, byte command, byte* tx_data, int n_bytes);
 void TitanRead(int address, byte command, byte* rx_data, int n_bytes);
 void home();
 int32_t ReadNumber ();
+int32_t readInt();
 void Rotate(uint16_t a);
 void waitForSerial();
-int getPWMDutyCycle(int pin);
+int getPWMDutyCycle();
 //void waitForRS485();
+void keyboard_input(int ki);
 
   
 void setup()
 {
   //pinMode(toggle_pin,INPUT);
+  
+  Serial.begin(115200); 
+  uint32_t timeout = 5000;
+  uint32_t startTime = millis();
+  while (!Serial && millis() - startTime < timeout) {
+    continue;
+  }
+  delay(2000);
+  Serial.println("Hello World");
   Wire.begin();
-  Serial.begin(9600); 
-  Serial.println("\nHello World");
 
   //wait for motor startup sequence to finish
   //delay(600);
@@ -72,11 +90,15 @@ void setup()
   //Serial.println("Press any key to complete initial set up...");
 
   // turn on lights
+  
   pinMode(pin_lightR, OUTPUT);
   pinMode(pin_lightL, OUTPUT);
 
   digitalWrite(pin_lightR,HIGH);
   digitalWrite(pin_lightL,HIGH);
+
+  capture_pin2.config(CAPTURE_TIME_WINDOW);
+  
 }
 
 
@@ -84,14 +106,23 @@ void setup()
 void loop() {
   //if (Serial.available()) {
   // command = char(Serial.read());
+  Serial.println("Press a key to continue...");
   waitForSerial();
-  while (Serial.available()) {
-      command[i] = char(Serial.read());
-      i = i + 1;
-    }
-    i = 0;
-    //Serial.print((String)(command[0]+command[1]));
-    switch ((int) command[0]) {
+  while(1) {			  // force into a loop until 'n' is received
+          while (!Serial.available()) {}
+          command[i] = char(Serial.read());
+          if (command[i] == '\n') break;   // exit the while(1), we're done receiving
+          if (command[i] == -1) continue;  // if no characters are in the buffer read() returns -1
+          i = i + 1;
+  }
+  i=0;
+  keyboard_input(command[0]);
+  
+}
+
+
+void keyboard_input(int ki) {
+   switch (ki) {
       case '1': // rotate 180
         angle = 0x8001;
         tx_data[0] = (angle >> 8) & 0x00FF;
@@ -125,7 +156,7 @@ void loop() {
       case 'r': // rotate in counts - absolute motion
         Serial.println("Enter motor abs position in counts [0 - 65536]"); 
         angle=ReadNumber(); //  
-        Serial.println("Rotating ");
+        Serial.print("Rotating ");
         Serial.println(angle);
         if (angle<0) {
           Serial.println("Rotation should be a positive number (absolute coordinate). Exiting motion..");
@@ -139,7 +170,9 @@ void loop() {
         break;
       case 'd': // rotate in deg - absolute motion
         Serial.println("Enter motor abs position in deg [0 - 360]"); 
-        angle=ReadNumber(); //  
+        angle=readInt(); //int32_t readInt()   
+        Serial.print("Rotating ");
+        Serial.println(angle);
         if (angle<0) {
           Serial.println("Rotation should be a positive number (absolute coordinate). Exiting motion..");
           break;
@@ -169,8 +202,8 @@ void loop() {
          Serial.println((String)"Encoder value - analog (0-1024) = " + val);
 
       case 'p': // read the encoder digital input
-        dutyCycle = getPWMDutyCycle(pwmPin);  // Read PWM duty cycle
-         Serial.println((String)"Encoder value - digital (0-1000) = " + dutyCycle);
+        dutyCycle = getPWMDutyCycle();  // Read PWM duty cycle
+         Serial.println((String)"Encoder value - digital (0-10000) = " + dutyCycle);
       
       case 10: //'\n'
         break;
@@ -180,11 +213,10 @@ void loop() {
         waitForSerial();
       break;
     }
-  
 }
 
 void home() {
-  Serial.print("Resetting motor\r\n");
+  Serial.println("Resetting motor");
   //send the reset command (0x01)
   TitanWrite(dev_addr, 0x01, tx_data, 0);  
   
@@ -216,12 +248,12 @@ void home() {
      TitanRead(dev_addr, 0x02, rx_data, 1);
      if(rx_data[0] == 0x01)
      {
-       Serial.print("Homing complete \r\n");
+       Serial.println("Homing complete \r\n");
        finished_homing = true;
      }
      else if(rx_data[0] == 0x02)
      {
-      Serial.print("Homing failed!\r\n");
+      Serial.println("Homing failed!\r\n");
       return;
      }
      delay(100);
@@ -266,6 +298,7 @@ void TitanRead(int address, byte command, byte* rx_data, int n_bytes)
   while (!Serial.available()) {}
   integerValue = 0;		  // throw away previous integerValue
   while(1) {			  // force into a loop until 'n' is received
+    while (!Serial.available()) {}
     incomingByte = Serial.read();
     if ((incomingByte == '\n')&&(c)) break;   // exit the while(1), we're done receiving
    // if ((incomingByte == '\n')&&(!c)) continue;   // ignore \n as first char
@@ -278,13 +311,32 @@ void TitanRead(int address, byte command, byte* rx_data, int n_bytes)
   return integerValue;
 }
 
+int32_t readInt() {
+  // Block (wait) until a number is available, then read and return it.
+  while (!Serial.available()) {}  // Wait for serial byte to be available
+  return (int32_t)Serial.parseInt();
+}
+
 void waitForSerial() {
   while (!Serial.available()) {
   }
   //Serial.println(Serial.read());
 }
 
-int getPWMDutyCycle(int pin) {
+int getPWMDutyCycle() {
+  // Read PWM duty cycle
+  uint32_t status,duty,period;
+  status=capture_pin2.get_duty_and_period(duty,period);
+  
+  // Calculate duty cycle as a percentage
+  int dc = ((double)duty/period)*10000;
+  
+  return dc;
+}
+
+
+/*
+int getPWMDutyCycle_old(int pin) {
   // Read PWM duty cycle
   unsigned long highTime = pulseIn(pin, HIGH);  // Time in microseconds when the signal is high
   unsigned long lowTime = pulseIn(pin, LOW);    // Time in microseconds when the signal is low
@@ -294,6 +346,8 @@ int getPWMDutyCycle(int pin) {
   
   return dc;
 }
+*/
+
 
 /*
 void waitForRS485() {
