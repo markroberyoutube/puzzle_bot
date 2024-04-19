@@ -1,5 +1,6 @@
 /*
-
+ * ClearCore Motion Controller
+ *
  * Description:
  *   ClearCore program to offer control of an X-Y-Z gantry of 4 ClearPath motors (X, Y1, Y2, Z) over a serial protocol
  *
@@ -183,7 +184,6 @@ bool processEStop();
  * Returns: 
  *   none
  */
-
 void setup() {
 
   // Start serial communication and wait for it to open properly before continuing
@@ -218,7 +218,7 @@ void setup() {
   }
 
   // Set up the soft e-stop on all motors
-  motorX.EStopConnector(softStopPin);
+  motors.EStopConnector(softStopPin);
   motorY1.EStopConnector(softStopPin);
   motorY2.EStopConnector(softStopPin);
   motorZ.EStopConnector(softStopPin);
@@ -308,7 +308,7 @@ void loop() {
  *   required by the command
  *
  * Parameters:
- *   none
+ *   command: A single character representing the command to process
  *
  * Returns: 
  *   none
