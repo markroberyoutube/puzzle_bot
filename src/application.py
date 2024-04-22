@@ -1069,23 +1069,55 @@ class Ui(QMainWindow):
         def take_gripper_calibration_start_photo():
             destination_photo_path = os.path.join(self.gripper_photo_dir, "start.jpg")
             self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            self.update_gripper_calibration_info(dict(start_x=x, start_y=y, start_z=z))
         self.gripper_calibration_take_start_photo_button.clicked.connect(take_gripper_calibration_start_photo)
         
         @pyqtSlot()
         def take_camera_delta_photo():
             destination_photo_path = os.path.join(self.gripper_photo_dir, "camera_delta.jpg")
             self.take_photo(destination_photo_path, self.camera_delta_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.camera_delta_x_textbox.text())
+            y = parse_int(self.camera_delta_y_textbox.text())
+            z = parse_int(self.camera_delta_z_textbox.text())
+            self.update_gripper_calibration_info(dict(camera_delta_x=x, camera_delta_y=y, camera_delta_z=z))
         self.take_camera_delta_photo_button.clicked.connect(take_camera_delta_photo)
         
         @pyqtSlot()
         def take_gripper_delta_photo():
             destination_photo_path = os.path.join(self.gripper_photo_dir, "gripper_delta.jpg")
             self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.gripper_delta_x_textbox.text())
+            y = parse_int(self.gripper_delta_y_textbox.text())
+            z = parse_int(self.gripper_delta_z_textbox.text())
+            angle = parse_int(self.gripper_calibration_angle_textbox.text())
+            self.update_gripper_calibration_info(dict(gripper_delta_x=x, gripper_delta_y=y, gripper_delta_z=z, gripper_angle=angle))
         self.take_gripper_delta_photo_button.clicked.connect(take_gripper_delta_photo)
         
         # Start up a thread for the gripper calibration functionality
         # self.gripper_calibration = GripperCalibration(parent=self)
         # self.gripper_calibration.start()
+    
+    def update_gripper_calibration_info(data_dict):
+        gripper_calibration_info_filepath = os.path.join(self.gripper_photo_dir, "gripper_calibration_info.json")
+
+        # Open up an existing (or create a new) batch JSON file
+        gripper_calibration_info = {}
+        if gripper_calibration_info_filepath and os.path.exists(gripper_calibration_info_filepath):
+            with open(gripper_calibration_info_filepath, "r") as jsonfile:
+                gripper_calibration_info = json.load(jsonfile)
+        
+        # Add info about the new photo to the batch_info
+        gripper_calibration_info.update(data_dict)
+        
+        # Write the JSON file back to disk
+        with open(gripper_calibration_info, "w") as jsonfile:
+            json.dump(gripper_calibration_info, jsonfile)
     
     def pickup_piece(self, pickup_x, pickup_y, pickup_z, travel_z):
         """Vacuum on, Lower Z to pickup_z, pick up piece, raise Z to travel_z"""
