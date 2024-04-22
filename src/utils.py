@@ -1,4 +1,5 @@
 from scipy import stats
+import unicodedata
 
 def parse_int(data):
     """Parses the first contiguous integer from data"""

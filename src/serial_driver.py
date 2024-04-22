@@ -109,8 +109,14 @@ class SerialBase(QThread):
                 self.port_opened.emit(True) # Let other threads know port opened successfully
                 # Finally, start a loop to process incoming messages
                 while (not self._thread_exiting):
-                    line = self._port.readline().decode('ascii').strip()
-                    self.line_received.emit(line)
+                    try:
+                        raw_line = self._port.readline()
+                        # Filter any nonprintable characters (sometimes )
+                        filtered_chars = [b for b in raw_line if b >= ord(' ') and b <= ord('~')]
+                        line = bytes(filtered_chars).decode('ascii')
+                        self.line_received.emit(line)
+                    except Exception as error:
+                        logging.error(f"[SerialBase.run] Error decoding ascii {repr(raw_line)} on {self.name} port: {error}")
                 # When thread is exiting, close the serial port
                 self._port.close()
         
@@ -148,66 +154,26 @@ class DummyClearCore(ClearCore):
             timeout = timeout
         )
 
-class GripperSerial(SerialBase):
-    """"The Gripper serial driver.
+
+class Gripper(SerialBase):
+    """"The Gripper Controller serial driver.
     
     Parameters
     ----------
-    name
-        The user friendly name of this port.
+    parent
+        The main thread that created this one, used to prevent unwanted garbage collection
     port_id
         The port id for this port.
     baud_rate
-        The baud rate to communicate at.
+        The baud rate to communicate at. Default is 9600 baud
     timeout
-        The timeout for this port (s).
+        The timeout for this port (s). Default is None (wait forever for data to arrive)
     """
-    def __init__(
-            self,
-            port_id: str = "VID:PID=2341:0042",
-            baud_rate: int = 115200,
-            timeout:int = 1) -> None:
+    def __init__(self, parent=None, port_id="VID:PID=2341:003D", baud_rate=9600, timeout=None):
         super().__init__(
-            name="Gripper",
-            port_id=port_id,
-            baud_rate=baud_rate,
-            timeout=timeout)
-    
-    def start(self) -> None:
-        """Start the driver."""
-        super().start()
-    
-    def stop(self) -> None:
-        """Stop the driver."""
-        super().stop()
-
-    def rotate(self, angle: float) -> None:
-        """Rotate absolute.
-        
-        Parameters
-        ----------
-        angle
-            The angle to rotate to (deg).
-        """
-        if angle < 0:
-            sys.exit("Angle should be > 0.")
-        elif angle > 360:
-            sys.exit("Angle should be < 360.")
-
-        payload: list[bytearray] | None = None
-        # TODO: Check if 0 and 180 work.
-        # if angle == 0.0:
-        #     payload = [bytearray("0\n", "ascii")]
-        # elif angle == 180.0:
-        #     payload = [bytearray("1\n", "ascii")]
-        # else:
-        payload = [bytearray("d\n", "ascii")]
-        payload.append(bytearray("%s\n" % angle, "ascii"))
-    
-        if self._port is not None and payload is not None:
-            for _payload in payload:
-                self._port.write(_payload)
-    
-    def get_cfg(self) -> float:
-        """Get the current gripper angle."""
-        raise NotImplementedError()
+            parent = parent,
+            name = "GripperController",
+            port_id = port_id,
+            baud_rate = baud_rate,
+            timeout = timeout
+        )

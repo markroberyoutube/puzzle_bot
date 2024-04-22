@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 from utils import parse_int
-from serial_driver import ClearCore, DummyClearCore
+from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
 
@@ -34,7 +34,8 @@ class Ui(QMainWindow):
         self.show() # Show the GUI
 
         # Instance variables
-        self.clearcore = None # For the ClearCoreSerial thread
+        self.clearcore = None # For the ClearCore Serial thread
+        self.gripper = None # For the Gripper Serial thread
         self.camera = None # For the GalaxyS24 thread
         self.camera_calibration = None # For the CameraCalibration thread
         
@@ -59,6 +60,7 @@ class Ui(QMainWindow):
         self.setup_move_robot_tab()
         self.setup_serpentine_photos_tab()
         self.setup_camera_calibration_tab()
+        self.setup_gripper_calibration_tab()
     
     def closeEvent(self, event):
         logging.debug(f"[Ui.closeEvent] closing main window")
@@ -68,6 +70,12 @@ class Ui(QMainWindow):
             logging.debug(f"[Ui.closeEvent] closing ClearCoreSerial thread")
             self.clearcore.thread_closing.emit() # Tell the thread to exit its run loop
             self.clearcore.wait() # Wait for the thread to close (also closes the serial port)
+            
+        # Close the Gripper serial thread
+        if self.gripper is not None:
+            logging.debug(f"[Ui.closeEvent] closing Gripper thread")
+            self.gripper.thread_closing.emit() # Tell the thread to exit its run loop
+            self.gripper.wait() # Wait for the thread to close (also closes the serial port)
 
         # Close the GalaxyS24 thread
         if self.camera is not None:
@@ -88,7 +96,7 @@ class Ui(QMainWindow):
     def pixmap_from_image(self, image_path):
         """Create a pixmap from the image file at the supplied path, rotating for orientation as needed"""
         # Try to open the file as a pixmap
-        logging.debug(f"[Ui.pixmap_from_image] Showing image path: {image_path}")
+        logging.debug(f"[Ui.pixmap_from_image] Opening image path: {image_path}")
         try:
             pixmap = QPixmap(image_path)
         except Exception as e:
@@ -164,13 +172,15 @@ class Ui(QMainWindow):
     
     def setup_move_robot_tab(self):
         """Configure UI on the MOVE ROBOT tab"""
-        # Configure ClearCore output to always scroll to the bottom
+        # Configure serial output textarea to always scroll to the bottom
         scrollbar = self.clearcore_serial_output_textarea.verticalScrollBar()
         scrollbar.rangeChanged.connect(lambda minVal, maxVal: scrollbar.setValue(scrollbar.maximum()))
         
-        # Set all inputs as unavailable until we're connected to the ClearCore
+        # Set all inputs as unavailable until we're connected to the ClearCore and Gripper
         self.set_clearcore_availability(False)
+        self.set_gripper_availability(False)
         self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br/>")
+        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening Gripper...</font><br/>")
         
         # Connect to the ClearCore over serial
         self.clearcore = ClearCore(parent=self)
@@ -178,9 +188,14 @@ class Ui(QMainWindow):
         self.clearcore.line_received.connect(self.process_clearcore_response)
         self.clearcore.start()
         
+        # Connect to the Gripper Controller
+        self.gripper = Gripper(parent=self)
+        self.gripper.line_received.connect(self.process_gripper_response)
+        self.gripper.start()
+        
         # Connect all the buttons (coding this is faster than creating slots in the qt designer gui)
-        self.vacuum_on_button.clicked.connect(lambda: self.send_clearcore_command("1"))
-        self.vacuum_off_button.clicked.connect(lambda: self.send_clearcore_command("0"))
+        self.vacuum_on_button.clicked.connect(lambda: self.send_clearcore_command("1", update_position=False))
+        self.vacuum_off_button.clicked.connect(lambda: self.send_clearcore_command("0", update_position=False))
         self.home_button.clicked.connect(lambda: self.send_clearcore_command("h"))
         self.jog_positive_x_button.clicked.connect(lambda: self.send_clearcore_command("d"))
         self.jog_negative_x_button.clicked.connect(lambda: self.send_clearcore_command("a"))
@@ -188,6 +203,20 @@ class Ui(QMainWindow):
         self.jog_negative_y_button.clicked.connect(lambda: self.send_clearcore_command("s"))
         self.jog_positive_z_button.clicked.connect(lambda: self.send_clearcore_command("o"))
         self.jog_negative_z_button.clicked.connect(lambda: self.send_clearcore_command("l"))
+        self.linear_encoder_button.clicked.connect(lambda: self.send_gripper_command('d', update_position=False))
+        self.home_gripper_button.clicked.connect(lambda: self.send_gripper_command('h'))
+
+        @pyqtSlot()
+        def rotate_absolute():
+            # Get desired position (rotational counts)
+            angle_counts = parse_int(self.gripper_angle_textbox.text())
+            if not angle_counts or angle_counts is None:
+                angle_counts = 0
+                self.gripper_angle_textbox.setText(str(angle_counts))
+            # Send command to move to this position
+            self.send_gripper_command(f"r {angle_counts}")
+        self.rotate_gripper_button.clicked.connect(rotate_absolute)
+        
         @pyqtSlot()
         def move_absolute():
             # Get desired position
@@ -200,13 +229,126 @@ class Ui(QMainWindow):
         
         # Wait 2 seconds for the ClearCore to reset before we make any writes to it
         @pyqtSlot(bool)
-        def on_port_open(port_status):
+        def on_clearcore_open(port_status):
             if (port_status):
                 self.set_clearcore_availability(True)
                 self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>ClearCore opened!</font><br/>")
             else:
                 self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening ClearCore.</font><br/>")
-        self.clearcore.port_opened.connect(on_port_open)
+        self.clearcore.port_opened.connect(on_clearcore_open)
+        
+        # Wait 2 seconds for the Arduino to reset before we make any writes to it
+        @pyqtSlot(bool)
+        def on_gripper_open(port_status):
+            if (port_status):
+                self.set_gripper_availability(True)
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Gripper opened!</font><br/>")
+            else:
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening Gripper.</font><br/>")
+        self.gripper.port_opened.connect(on_gripper_open)
+
+    @pyqtSlot(str)
+    def process_gripper_response(self, line):
+        """Process Gripper responses."""
+
+        logging.debug(f"[Ui.process_gripper_response] line received: {repr(line)}")
+
+        # Process 'p' motor position responses
+        if line.startswith("SUCCESS: printMotorPosition"):
+            # Parse the encoder position from the response (ex: "SUCCESS: printMotorPosition 10000 10002")
+            motor_encoder_angle = parse_int(line.split(" ")[-1])
+            # Update textbox with the new position
+            self.rotate_gripper_results_label.setText(
+                f"Actual:\n({str(motor_encoder_angle)})"
+            )
+            # Hide these position responses from the serial output so they don't clog up that textarea
+            return
+        
+        # Process 'd' linear encoder position responses
+        if line.startswith("SUCCESS: printEncoderDigitalValue"):
+            linear_encoder_value = parse_int(line.split(" ")[-1])
+            # Update the textbox with the value
+            self.linear_encoder_textbox.setText(str(linear_encoder_value))
+
+        # Format line and add it to the textarea
+        html_line = ""
+        status = line.split(":")[0]
+        message = ":".join(line.split(":")[1:])
+
+        red = "#ff3300"
+        green = "#009900"
+        if status == "SUCCESS":
+            html_line += f"<font style='color: {green};'>GRIPPER {status}:</font> {message}<br/>"
+        else:
+            html_line += f"<font style='color: {red};'>GRIPPER {status}:</font> {message}<br/>"
+        self.clearcore_serial_output_textarea.insertHtml(html_line) 
+
+    def set_gripper_availability(self, enabled=True):
+        """Set the availability of all input buttons related to the Gripper to enabled or disabled."""
+        self.linear_encoder_button.setEnabled(enabled)
+        self.rotate_gripper_button.setEnabled(enabled)
+        self.home_gripper_button.setEnabled(enabled)
+        
+
+    def send_gripper_command(self, command, blocking=False, update_position=True):
+        """Send command to the gripper serial port, disabling corresponding button inputs until we receive a response.
+        
+        If blocking is set to True, will sleep until command is finished before returning
+        
+        If update_position is set to True, will send a follow-on 'p' command to update position
+        
+        """
+        if (not command):
+            logging.error(f"[Ui.send_gripper_command] command parameter missing or empty")
+            return
+        else:
+            logging.debug(f"[Ui.send_gripper_command] sending command: {command}")
+        
+        # Disable input buttons until we get a response
+        self.set_gripper_availability(False)
+        
+        # Setup a response callback
+        self.gripper_command_finished = False
+        @pyqtSlot(str)
+        def on_response(line):
+            # Remove this callback
+            self.gripper.line_received.disconnect(on_response)
+            
+            # If desired, send a follow-on 'p' command to get the current position
+            if update_position:
+                self.gripper_position_command_finished = False
+                @pyqtSlot(str)
+                def on_position_response(line):
+                    # Remove this callback
+                    self.gripper.line_received.disconnect(on_position_response)
+                    # Indicate the follow-on command has finished
+                    self.gripper_position_command_finished = True
+                    # Finally re-enable the input buttons
+                    self.set_gripper_availability(True)
+                self.gripper.line_received.connect(on_position_response)
+                # Send the follow-on 'p'
+                self.gripper.line_ready_to_transmit.emit("p")
+                # Optionally, block until the response has arrived
+                if blocking:
+                    while not self.gripper_position_command_finished:
+                        QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+            else:
+                # Finally re-enable the input buttons
+                self.set_gripper_availability(True)
+                        
+            # Indicate the initial command has finished
+            self.gripper_command_finished = True
+            
+        # Connect the callback    
+        self.gripper.line_received.connect(on_response)
+
+        # Emit the command to the ClearCore QThread, for transmission over the serial port
+        self.gripper.line_ready_to_transmit.emit(command)
+                
+        # Optionally, block until the command response has arrived
+        if blocking:
+            while not self.gripper_command_finished:
+                QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
 
     @pyqtSlot(str)
     def process_clearcore_response(self, line):
@@ -259,36 +401,71 @@ class Ui(QMainWindow):
         self.jog_positive_z_button.setEnabled(enabled)
         self.jog_negative_z_button.setEnabled(enabled)
         self.move_absolute_button.setEnabled(enabled)
-    
-    def send_clearcore_command(self, command):
-        """Send command to the clearcore serial port, disabling corresponding button inputs until we receive a response."""
+        self.gripper_calibration_move_start_button.setEnabled(enabled)
+        self.move_camera_delta_button.setEnabled(enabled)
+        self.move_gripper_delta_button.setEnabled(enabled)
+        self.gripper_calibration_rotate_button.setEnabled(enabled)
+
+    def send_clearcore_command(self, command, blocking=False, update_position=True):
+        """Send command to the clearcore serial port, disabling corresponding button inputs until we receive a response.
+        
+        If blocking is set to True, will sleep until command is finished before returning
+        
+        If update_position is set to True, will send a follow-on 'p' command to update position
+        
+        """
         if (not command):
             logging.error(f"[Ui.send_clearcore_command] command parameter missing or empty")
             return
+        else:
+            logging.debug(f"[Ui.send_clearcore_command] sending command: {command} with blocking={blocking} and update_position={update_position}")
         
         # Disable input buttons until we get a response
         self.set_clearcore_availability(False)
         
         # Setup a response callback
+        self.clearcore_command_finished = False
         @pyqtSlot(str)
         def on_response(line):
             # Remove this callback
             self.clearcore.line_received.disconnect(on_response)
             
-            # After every command, send a 'p' command to get the current position
-            @pyqtSlot(str)
-            def on_position_response(line):
-                # Remove this callback
-                self.clearcore.line_received.disconnect(on_position_response)
+            # If desired, send a follow-on 'p' command to get the current position
+            if update_position:
+                self.clearcore_position_command_finished = False
+                @pyqtSlot(str)
+                def on_position_response(line):
+                    # Remove this callback
+                    self.clearcore.line_received.disconnect(on_position_response)
+                    # Indicate the follow-on command has finished
+                    self.clearcore_position_command_finished = True
+                    # Finally re-enable the input buttons
+                    self.set_clearcore_availability(True)
+                self.clearcore.line_received.connect(on_position_response)
+                # Send the follow-on 'p'
+                self.clearcore.line_ready_to_transmit.emit("p")
+                # Optionally, block until the response has arrived
+                if blocking:
+                    while not self.clearcore_position_command_finished:
+                        QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+            else:
                 # Finally re-enable the input buttons
                 self.set_clearcore_availability(True)
-            self.clearcore.line_received.connect(on_position_response)
-            self.clearcore.line_ready_to_transmit.emit("p")
+                        
+            # Indicate the initial command has finished
+            self.clearcore_command_finished = True
+            
+        # Connect the callback    
         self.clearcore.line_received.connect(on_response)
-                
+
         # Emit the command to the ClearCore QThread, for transmission over the serial port
         self.clearcore.line_ready_to_transmit.emit(command)
         
+        # Optionally, block until the command response has arrived
+        if blocking:
+            while not self.clearcore_command_finished:
+                QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+
 
     ################################################################################################
     ################################################################################################
@@ -414,12 +591,8 @@ class Ui(QMainWindow):
                 # Connect the callback
                 self.clearcore.line_received.connect(on_response)
                 
-                # Send command to begin moving to the desired location
-                self.send_clearcore_command(f"m {x},{y},{z}")
-                
-                # Wait for move to finish
-                while not self.serpentine_move_finished:
-                    QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+                # Send command to begin moving to the desired location, and block until finished
+                self.send_clearcore_command(f"m {x},{y},{z}", blocking=True)
                 
                 # Wait 1 second for machine vibrations to stop
                 QtTest.QTest.qWait(1000)
@@ -454,7 +627,7 @@ class Ui(QMainWindow):
 
     def take_screenshot(self):
         """Take a screenshot from the Galaxy S24 and display it"""
-        # Disable the screenshot until the photo has been completed
+        # Disable the screenshot button until the photo has been completed
         self.screenshot_button.setEnabled(False)
         
         # Create a temporary screenshot directory if one does not exist
@@ -786,7 +959,6 @@ class Ui(QMainWindow):
     def write_camera_calibration_config(self):
         """Update self.config from camera calibration tab input boxes and write it to a JSON-formatted config file"""
         # Update self.config from input boxes
-        
         self.config['camera_calibration_checker_rows'] = self.camera_calibration_checker_rows_spinbox.value()
         self.config['camera_calibration_checker_columns'] = self.camera_calibration_checker_columns_spinbox.value()
         self.config['camera_calibration_checker_width'] = self.camera_calibration_checker_width_textbox.text()
@@ -807,7 +979,202 @@ class Ui(QMainWindow):
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
             json.dump(self.config, jsonfile)
+            
+            
+    ################################################################################################
+    ################################################################################################
+    # "GRIPPER CALIBRATION" TAB
+    ################################################################################################
+    ################################################################################################
+    def setup_gripper_calibration_tab(self):
+        """Configure UI on the GRIPPER CALIBRATION tab"""
+        
+        # Create a temporary directory for the gripper calibration photos
+        self.gripper_photo_dir = tempfile.mkdtemp()
+        
+        # Read the config file and update all textboxes
+        self.read_gripper_calibration_config()
+        
+        # Configure all textboxes to auto-save config file upon change
+        self.gripper_calibration_start_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_start_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_angle_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_pickup_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_spin_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.motor_counts_x_per_px_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.motor_counts_y_per_px_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_to_gripper_x_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_to_gripper_y_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_to_gripper_angle_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
 
+        # Configure buttons
+        
+        @pyqtSlot()
+        def gripper_calibration_move_start():
+            # Get desired position
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.gripper_calibration_move_start_button.clicked.connect(gripper_calibration_move_start)
+        
+        @pyqtSlot()
+        def gripper_calibration_move_camera_delta():
+            # Get desired position
+            x = parse_int(self.camera_delta_x_textbox.text())
+            y = parse_int(self.camera_delta_y_textbox.text())
+            z = parse_int(self.camera_delta_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.move_camera_delta_button.clicked.connect(gripper_calibration_move_camera_delta)
+        
+        @pyqtSlot()
+        def gripper_calibration_move_gripper_delta():
+            # Get desired position
+            x = parse_int(self.gripper_delta_x_textbox.text())
+            y = parse_int(self.gripper_delta_y_textbox.text())
+            z = parse_int(self.gripper_delta_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.move_gripper_delta_button.clicked.connect(gripper_calibration_move_gripper_delta)
+        
+        @pyqtSlot()
+        def gripper_calibration_rotate_target():
+            # Get desired rotation angle and pickup z location
+            angle = parse_int(self.gripper_calibration_angle_textbox.text())
+            pickup_x = parse_int(self.gripper_delta_x_textbox.text())
+            pickup_y = parse_int(self.gripper_delta_y_textbox.text())
+            pickup_z = parse_int(self.gripper_calibration_pickup_z_textbox.text())
+            spin_z = parse_int(self.gripper_calibration_spin_z_textbox.text())
+            
+            # Pick up the piece (the gripper calibration target), rotate it, and put it back down
+            self.send_gripper_command(f"r 0", blocking=True) # Set rotation to 0
+            self.pickup_piece(pickup_x, pickup_y, pickup_z, spin_z) # Pick up the target
+            self.send_gripper_command(f"r {angle}", blocking=True) # Rotate the target
+            self.putdown_piece(pickup_x, pickup_y, pickup_z, spin_z) # Put down the target
+            
+            # Finally, move back to the start position to get ready to take the final photo
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.gripper_calibration_rotate_button.clicked.connect(gripper_calibration_rotate_target)
+        
+        @pyqtSlot()
+        def take_gripper_calibration_start_photo():
+            destination_photo_path = os.path.join(self.gripper_photo_dir, "start.jpg")
+            self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
+        self.gripper_calibration_take_start_photo_button.clicked.connect(take_gripper_calibration_start_photo)
+        
+        @pyqtSlot()
+        def take_camera_delta_photo():
+            destination_photo_path = os.path.join(self.gripper_photo_dir, "camera_delta.jpg")
+            self.take_photo(destination_photo_path, self.camera_delta_photo_label)
+        self.take_camera_delta_photo_button.clicked.connect(take_camera_delta_photo)
+        
+        @pyqtSlot()
+        def take_gripper_delta_photo():
+            destination_photo_path = os.path.join(self.gripper_photo_dir, "gripper_delta.jpg")
+            self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
+        self.take_gripper_delta_photo_button.clicked.connect(take_gripper_delta_photo)
+        
+        # Start up a thread for the gripper calibration functionality
+        # self.gripper_calibration = GripperCalibration(parent=self)
+        # self.gripper_calibration.start()
+    
+    def pickup_piece(self, pickup_x, pickup_y, pickup_z, travel_z):
+        """Vacuum on, Lower Z to pickup_z, pick up piece, raise Z to travel_z"""
+        
+        # Vacuum ON
+        self.send_clearcore_command("1", blocking=True, update_position=False)
+        
+        # Lower Z
+        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{pickup_z}", blocking=True, update_position=True)
+
+        # Pause to allow vacuum to form
+        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
+        
+        # Raise Z
+        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{travel_z}", blocking=True, update_position=True)
+
+    def putdown_piece(self, putdown_x, putdown_y, putdown_z, travel_z):
+        """Lower Z to putdown_z, vacuum off, raise Z to travel_z"""
+        # Lower Z
+        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{putdown_z}", blocking=True, update_position=True)
+        
+        # Vacuum OFF
+        self.send_clearcore_command("0", blocking=True, update_position=False)
+        
+        # Pause to allow vacuum to purge
+        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
+        
+        # Raise Z
+        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{travel_z}", blocking=True, update_position=True)
+
+    def take_photo(self, destination_photo_path, label_area):
+        """Take a photo using the Galaxy S24, store it at the specified path, and display it in the label area"""
+        # Determine destination dir and filename from given path
+        destination_photo_dir, destination_photo_filename = os.path.split(destination_photo_path)
+                
+        # Set up a callback to display the photo once it has been taken
+        @pyqtSlot(str)
+        def on_capture(captured_image_path):
+            # Remove this callback
+            self.camera.photo_captured.disconnect(on_capture)
+            # Rename the file
+            os.rename(captured_image_path, destination_photo_path)
+            # Display the photo
+            self.display_image(destination_photo_path, label_area)
+        self.camera.photo_captured.connect(on_capture)
+        
+        # Trigger the photo to be taken
+        self.camera.trigger_photo.emit(destination_photo_dir)
+        
+    def read_gripper_calibration_config(self):
+        """Update gripper calibration tab input boxes from JSON-formatted config file"""
+        with open(self.config_file_path, "r") as jsonfile:
+            self.config = json.load(jsonfile)
+            self.gripper_calibration_start_x_textbox.setText(self.config.get('gripper_calibration_start_x', ''))
+            self.gripper_calibration_start_y_textbox.setText(self.config.get('gripper_calibration_start_y', ''))
+            self.camera_delta_x_textbox.setText(self.config.get('camera_delta_x', ''))
+            self.camera_delta_y_textbox.setText(self.config.get('camera_delta_y', ''))
+            self.gripper_delta_x_textbox.setText(self.config.get('gripper_delta_x', ''))
+            self.gripper_delta_y_textbox.setText(self.config.get('gripper_delta_y', ''))
+            self.gripper_calibration_angle_textbox.setText(self.config.get('gripper_calibration_angle', ''))
+            self.gripper_calibration_pickup_z_textbox.setText(self.config.get('gripper_calibration_pickup_z', ''))
+            self.gripper_calibration_spin_z_textbox.setText(self.config.get('gripper_calibration_spin_z', ''))
+            self.motor_counts_x_per_px_x_textbox.setText(self.config.get('motor_counts_x_per_px_x', ''))
+            self.motor_counts_y_per_px_y_textbox.setText(self.config.get('motor_counts_y_per_px_y', ''))
+            self.camera_to_gripper_x_transform_textbox.setText(self.config.get('camera_to_gripper_x_transform', ''))
+            self.camera_to_gripper_y_transform_textbox.setText(self.config.get('camera_to_gripper_y_transform', ''))
+            self.camera_to_gripper_angle_transform_textbox.setText(self.config.get('camera_to_gripper_angle_transform', ''))
+    
+    def write_gripper_calibration_config(self):
+        """Update self.config from gripper calibration tab input boxes and write it to a JSON-formatted config file"""
+        # Update self.config from input boxes
+        self.config['gripper_calibration_start_x'] = self.gripper_calibration_start_x_textbox.text()
+        self.config['gripper_calibration_start_y'] = self.gripper_calibration_start_y_textbox.text()
+        self.config['camera_delta_x'] = self.camera_delta_x_textbox.text()
+        self.config['camera_delta_y'] = self.camera_delta_y_textbox.text()
+        self.config['gripper_delta_x'] = self.gripper_delta_x_textbox.text()
+        self.config['gripper_delta_y'] = self.gripper_delta_y_textbox.text()
+        self.config['gripper_calibration_angle'] = self.gripper_calibration_angle_textbox.text()
+        self.config['gripper_calibration_pickup_z'] = self.gripper_calibration_pickup_z_textbox.text()
+        self.config['gripper_calibration_spin_z'] = self.gripper_calibration_spin_z_textbox.text()
+        self.config['motor_counts_x_per_px_x'] = self.motor_counts_x_per_px_x_textbox.text()
+        self.config['motor_counts_y_per_px_y'] = self.motor_counts_y_per_px_y_textbox.text()
+        self.config['camera_to_gripper_x_transform'] = self.camera_to_gripper_x_transform_textbox.text()
+        self.config['camera_to_gripper_y_transform'] = self.camera_to_gripper_y_transform_textbox.text()
+        self.config['camera_to_gripper_angle_transform'] = self.camera_to_gripper_angle_transform_textbox.text()
+        
+        # Write self.config to a JSON-formatted config file
+        with open(self.config_file_path, "w") as jsonfile:
+            json.dump(self.config, jsonfile)
 
 
 def sigint_handler(*args):

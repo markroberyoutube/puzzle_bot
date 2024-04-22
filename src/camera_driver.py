@@ -54,7 +54,7 @@ class GalaxyS24(QThread):
 
     @pyqtSlot(str)
     def capture_photo(self, batch_dir=None):
-        """Capture a photo and save it to batch_dir with a timestamped filename"""
+        """Capture a photo and save it to batch_dir as a timestamped filename"""
         
         # Ensure parent dir exists
         if not os.path.exists(batch_dir):
