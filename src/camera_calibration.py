@@ -163,8 +163,6 @@ class CameraCalibration(QThread):
         # )
         # three_d_points = new_three_d_points
         
-        
-        
         # Run camera calibration routine
         rms_reprojection_error, camera_matrix, distortion_coefficients, r_vecs, t_vecs = cv.calibrateCamera(
             three_d_points, two_d_points, img_size, camera_matrix, distortion_coefficients, None, None, flags, criteria

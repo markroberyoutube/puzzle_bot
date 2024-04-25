@@ -1,5 +1,6 @@
 # OSX junk
 *.DS_Store
+Icon
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

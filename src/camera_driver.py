@@ -96,7 +96,10 @@ class GalaxyS24(QThread):
             if not self.adb("adb shell input tap 768 1616", 1000)[0]: return
 
             # Click "Multi" to enable a multi-point auto focus (and wait 3 secs for camera to focus)
-            if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
+            #if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
+            
+            # Click "Center" to enable a center auto focus (and wait 3 secs for camera to focus)
+            if not self.adb("adb shell input tap 277 1592", 3000)[0]: return
         
             # Click "Manual" to disable auto focus
             if not self.adb("adb shell input tap 799 1626", 1000)[0]: return

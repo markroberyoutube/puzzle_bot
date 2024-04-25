@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1334</width>
-    <height>983</height>
+    <height>991</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -1831,19 +1831,6 @@ VISUALIZATION
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_26">
         <item>
-         <spacer name="verticalSpacer_7">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
          <layout class="QHBoxLayout" name="horizontalLayout_11">
           <item>
            <spacer name="horizontalSpacer_13">
@@ -2234,6 +2221,92 @@ max-width: 75px;</string>
          </layout>
         </item>
         <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_20" stretch="1,7,1">
+          <item>
+           <spacer name="horizontalSpacer_20">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QFrame" name="gridFrame_6">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_24" columnstretch="20,0,0">
+             <item row="1" column="2">
+              <widget class="QLineEdit" name="gripper_calibration_photo_batch_number_textbox">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="text">
+                <string>auto-filled</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QPushButton" name="gripper_calibration_photo_directory_browse_button">
+               <property name="styleSheet">
+                <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
+               </property>
+               <property name="text">
+                <string>...</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QLabel" name="label_70">
+               <property name="text">
+                <string>BATCH NUMBER</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLineEdit" name="gripper_calibration_photo_directory_textbox">
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_71">
+               <property name="text">
+                <string>CALIBRATION PHOTO DIRECTORY</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_19">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
          <layout class="QHBoxLayout" name="horizontalLayout_19">
           <item>
            <spacer name="horizontalSpacer_17">
@@ -2479,24 +2552,6 @@ max-width: 125px;</string>
                  </property>
                 </widget>
                </item>
-               <item row="1" column="2">
-                <widget class="QLineEdit" name="camera_to_gripper_angle_transform_textbox">
-                 <property name="styleSheet">
-                  <string notr="true">min-width: 125px;
-max-width: 125px;</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="2">
-                <widget class="QLabel" name="label_67">
-                 <property name="text">
-                  <string>ANGLE COUNTS</string>
-                 </property>
-                </widget>
-               </item>
               </layout>
              </item>
             </layout>
@@ -2516,19 +2571,6 @@ max-width: 125px;</string>
            </spacer>
           </item>
          </layout>
-        </item>
-        <item>
-         <spacer name="verticalSpacer_6">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </widget>

@@ -16,6 +16,7 @@ from utils import parse_int
 from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
+from gripper_calibration import GripperCalibration
 
 APPLICATION_NAME = "Puzzlin' Pete"
 
@@ -88,6 +89,12 @@ class Ui(QMainWindow):
             logging.debug(f"[Ui.closeEvent] closing CameraCalibration thread")
             self.camera_calibration.thread_closing.emit() # Tell the thread to exit its run loop
             self.camera_calibration.wait() # Wait for the thread to close
+        
+        # Close the GripperCalibration thread
+        if self.gripper_calibration is not None:
+            logging.debug(f"[Ui.closeEvent] closing GripperCalibration thread")
+            self.gripper_calibration.thread_closing.emit() # Tell the thread to exit its run loop
+            self.gripper_calibration.wait() # Wait for the thread to close
         
         # Continue closing the app
         logging.debug(f"[Ui.closeEvent] continuing to close")
@@ -870,6 +877,7 @@ class Ui(QMainWindow):
         
         # Compute camera intrinsics
         camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+        logging.debug(f"[Ui.measure_post_camera_calibration_error] matrix: {camera_matrix}\ndistortion: {distortion_coefficients}")
         
         # Setup a callback to report the results
         @pyqtSlot()
@@ -989,9 +997,6 @@ class Ui(QMainWindow):
     def setup_gripper_calibration_tab(self):
         """Configure UI on the GRIPPER CALIBRATION tab"""
         
-        # Create a temporary directory for the gripper calibration photos
-        self.gripper_photo_dir = tempfile.mkdtemp()
-        
         # Read the config file and update all textboxes
         self.read_gripper_calibration_config()
         
@@ -1005,13 +1010,14 @@ class Ui(QMainWindow):
         self.gripper_calibration_angle_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.gripper_calibration_pickup_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.gripper_calibration_spin_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_photo_directory_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.motor_counts_x_per_px_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.motor_counts_y_per_px_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.camera_to_gripper_x_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
         self.camera_to_gripper_y_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.camera_to_gripper_angle_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
 
         # Configure buttons
+        self.gripper_calibration_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.gripper_calibration_photo_directory_textbox))
         
         @pyqtSlot()
         def gripper_calibration_move_start():
@@ -1067,7 +1073,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_gripper_calibration_start_photo():
-            destination_photo_path = os.path.join(self.gripper_photo_dir, "start.jpg")
+            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "start.jpg")
             self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.gripper_calibration_start_x_textbox.text())
@@ -1078,7 +1084,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_camera_delta_photo():
-            destination_photo_path = os.path.join(self.gripper_photo_dir, "camera_delta.jpg")
+            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "camera_delta.jpg")
             self.take_photo(destination_photo_path, self.camera_delta_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.camera_delta_x_textbox.text())
@@ -1089,7 +1095,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_gripper_delta_photo():
-            destination_photo_path = os.path.join(self.gripper_photo_dir, "gripper_delta.jpg")
+            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "gripper_delta.jpg")
             self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.gripper_delta_x_textbox.text())
@@ -1099,12 +1105,74 @@ class Ui(QMainWindow):
             self.update_gripper_calibration_info(dict(gripper_delta_x=x, gripper_delta_y=y, gripper_delta_z=z, gripper_angle=angle))
         self.take_gripper_delta_photo_button.clicked.connect(take_gripper_delta_photo)
         
+        @pyqtSlot()
+        def run_gripper_calibration():
+            # Setup callback to display results
+            @pyqtSlot(list, list)
+            def on_results(motor_counts_per_px, camera_to_gripper_transform):
+                # Remove this callback 
+                self.gripper_calibration.gripper_calibration_results_ready.disconnect(on_results)
+                # Display results
+                self.motor_counts_x_per_px_x_textbox.setText(str(round(motor_counts_per_px[0],4)))
+                self.motor_counts_y_per_px_y_textbox.setText(str(round(motor_counts_per_px[1],4)))
+                self.camera_to_gripper_x_transform_textbox.setText(str(round(camera_to_gripper_transform[0],4)))
+                self.camera_to_gripper_y_transform_textbox.setText(str(round(camera_to_gripper_transform[1],4)))
+            # Add the callback to display results
+            self.gripper_calibration.gripper_calibration_results_ready.connect(on_results)
+            
+            # Trigger the gripper calibration routine
+            # gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
+            gripper_calibration_batch_directory = os.path.join(
+                "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
+                "3"
+            )
+            camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+            self.gripper_calibration.trigger_gripper_calibration.emit(
+                gripper_calibration_batch_directory, 
+                camera_matrix, 
+                distortion_coefficients
+            )
+        self.gripper_calibration_run_calibration_button.clicked.connect(run_gripper_calibration)
+        
         # Start up a thread for the gripper calibration functionality
-        # self.gripper_calibration = GripperCalibration(parent=self)
-        # self.gripper_calibration.start()
+        self.gripper_calibration = GripperCalibration(parent=self)
+        self.gripper_calibration.start()
     
-    def update_gripper_calibration_info(data_dict):
-        gripper_calibration_info_filepath = os.path.join(self.gripper_photo_dir, "gripper_calibration_info.json")
+    def get_gripper_calibration_batch_dir(self):
+        
+        # Get the main gripper calibration directory from the config data
+        photo_directory = self.config.get('gripper_calibration_photo_directory', '')
+        
+        if not photo_directory or not os.path.exists(photo_directory) or not os.path.isdir(photo_directory):
+            logging.error(f"[Ui.get_gripper_calibration_batch_dir] Gripper photo directory does not exist at: photo_directory")
+            return
+        
+        # If a batch number hasn't been generated, auto-generate the next batch directory (they are numbered sequentially)
+        batch_dir = None
+        batch_number_text = self.gripper_calibration_photo_batch_number_textbox.text().strip()
+        if batch_number_text and batch_number_text.isnumeric():
+            current_batch_number = int(batch_number_text)
+            batch_dir = os.path.join(photo_directory, str(current_batch_number))
+        else:
+            last_batch_number = 0
+            sub_dirs = [d for d in os.listdir(photo_directory) if os.path.isdir(os.path.join(photo_directory, d))]
+            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+            batch_dirs.sort(key=int) # sorts in place
+            if batch_dirs:
+                last_batch_number = int(batch_dirs[-1])
+            current_batch_number = last_batch_number + 1
+            batch_dir = os.path.join(photo_directory, str(current_batch_number))
+            os.makedirs(batch_dir)
+            self.gripper_calibration_photo_batch_number_textbox.setText(str(current_batch_number))
+        
+        # Finally return the batch directory
+        return batch_dir
+    
+    def update_gripper_calibration_info(self, data_dict):
+        gripper_calibration_info_filepath = os.path.join(
+            self.get_gripper_calibration_batch_dir(), 
+            "gripper_calibration_info.json"
+        )
 
         # Open up an existing (or create a new) batch JSON file
         gripper_calibration_info = {}
@@ -1116,7 +1184,7 @@ class Ui(QMainWindow):
         gripper_calibration_info.update(data_dict)
         
         # Write the JSON file back to disk
-        with open(gripper_calibration_info, "w") as jsonfile:
+        with open(gripper_calibration_info_filepath, "w") as jsonfile:
             json.dump(gripper_calibration_info, jsonfile)
     
     def pickup_piece(self, pickup_x, pickup_y, pickup_z, travel_z):
@@ -1180,11 +1248,11 @@ class Ui(QMainWindow):
             self.gripper_calibration_angle_textbox.setText(self.config.get('gripper_calibration_angle', ''))
             self.gripper_calibration_pickup_z_textbox.setText(self.config.get('gripper_calibration_pickup_z', ''))
             self.gripper_calibration_spin_z_textbox.setText(self.config.get('gripper_calibration_spin_z', ''))
+            self.gripper_calibration_photo_directory_textbox.setText(self.config.get('gripper_calibration_photo_directory',''))
             self.motor_counts_x_per_px_x_textbox.setText(self.config.get('motor_counts_x_per_px_x', ''))
             self.motor_counts_y_per_px_y_textbox.setText(self.config.get('motor_counts_y_per_px_y', ''))
             self.camera_to_gripper_x_transform_textbox.setText(self.config.get('camera_to_gripper_x_transform', ''))
             self.camera_to_gripper_y_transform_textbox.setText(self.config.get('camera_to_gripper_y_transform', ''))
-            self.camera_to_gripper_angle_transform_textbox.setText(self.config.get('camera_to_gripper_angle_transform', ''))
     
     def write_gripper_calibration_config(self):
         """Update self.config from gripper calibration tab input boxes and write it to a JSON-formatted config file"""
@@ -1198,11 +1266,11 @@ class Ui(QMainWindow):
         self.config['gripper_calibration_angle'] = self.gripper_calibration_angle_textbox.text()
         self.config['gripper_calibration_pickup_z'] = self.gripper_calibration_pickup_z_textbox.text()
         self.config['gripper_calibration_spin_z'] = self.gripper_calibration_spin_z_textbox.text()
+        self.config['gripper_calibration_photo_directory'] = self.gripper_calibration_photo_directory_textbox.text()
         self.config['motor_counts_x_per_px_x'] = self.motor_counts_x_per_px_x_textbox.text()
         self.config['motor_counts_y_per_px_y'] = self.motor_counts_y_per_px_y_textbox.text()
         self.config['camera_to_gripper_x_transform'] = self.camera_to_gripper_x_transform_textbox.text()
         self.config['camera_to_gripper_y_transform'] = self.camera_to_gripper_y_transform_textbox.text()
-        self.config['camera_to_gripper_angle_transform'] = self.camera_to_gripper_angle_transform_textbox.text()
         
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
