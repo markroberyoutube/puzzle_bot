@@ -18,6 +18,7 @@
  *       'p'       print the current position (motor counts)
  *       'h'       performs homing routine
  *       'r 12345' move to absolute position (0 to 0xFFFF)
+ *       'e 90' rotate googly eyes to 90 degrees (looking down)
  *       'a'       print the linear encoder's analog output value 
  *       'd'       print the linear encoder's digital output value
  *       '1'       turn the LEDs on
@@ -30,10 +31,11 @@
  *
  */
 
+#include "tc_lib.h" # Timer library, for measuring PWM pulse width
+#include "./Servo.h"
 #include <Wire.h> # For I2C
 #include <stdio.h>
 #include <stdlib.h>
-#include "tc_lib.h" # Timer library, for measuring PWM pulse width
 
 // When true, will print debug statements to the serial port
 const bool debug = false;
@@ -43,6 +45,12 @@ const unsigned long baudRate = 9600;
 
 // Encoder Settings
 int encoderAnalogPin = A0; // encoder pin analog input
+
+// Servo Settings
+const int leftEyeServoPin = 11;
+const int rightEyeServoPin = 10;
+Servo rightEyeServo;
+Servo leftEyeServo;
 
 // Miranda Motor Settings
 const uint8_t countsPerDegree = 182;
@@ -106,6 +114,12 @@ void setup() {
   Wire.begin();
   if (debug) { Serial.println("I2C is ready"); }
 
+  // Initialize the googly-eye servos
+  leftEyeServo.attach(leftEyeServoPin);
+  rightEyeServo.attach(rightEyeServoPin);
+  leftEyeServo.write(90);
+  rightEyeServo.write(90);
+
   // Turn on LED lights
   pinMode(rightLEDStripPin, OUTPUT);
   pinMode(leftLEDStripPin, OUTPUT);
@@ -162,10 +176,18 @@ void loop() {
  */
 void processCommand(char command) {
   static int32_t motorCounts = 0;
+  static int32_t eyeAngle = 0;
   
   switch (command) {
     if (debug) { Serial.print("Received command: "); Serial.println(command); }
 
+    case 'e': // move eyes
+      eyeAngle = readInt();
+      leftEyeServo.write(eyeAngle);
+      rightEyeServo.write(eyeAngle);
+      Serial.print("SUCCESS: moveEye");
+      break;
+      
     case 'h': // home motor
       homeMotor();
       break;
