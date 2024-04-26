@@ -185,7 +185,7 @@ void processCommand(char command) {
       eyeAngle = readInt();
       leftEyeServo.write(eyeAngle);
       rightEyeServo.write(eyeAngle);
-      Serial.print("SUCCESS: moveEye");
+      Serial.println("SUCCESS: moveEye");
       break;
       
     case 'h': // home motor
