@@ -2,6 +2,8 @@ import sys, os, logging, subprocess
 from datetime import datetime
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
 
+from utils import open_image_undistorted_and_rotated
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 

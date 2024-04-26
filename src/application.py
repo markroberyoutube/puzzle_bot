@@ -2,6 +2,7 @@
 
 import sys, os, threading, time, signal
 import exif, json, math, argparse, tempfile
+import cv2 as cv
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, Qt
@@ -12,11 +13,12 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-from utils import parse_int
+from utils import parse_int, open_image_undistorted_and_rotated
 from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
 from gripper_calibration import GripperCalibration
+from puzzle_solver import PuzzleSolver
 
 APPLICATION_NAME = "Puzzlin' Pete"
 
@@ -39,6 +41,8 @@ class Ui(QMainWindow):
         self.gripper = None # For the Gripper Serial thread
         self.camera = None # For the GalaxyS24 thread
         self.camera_calibration = None # For the CameraCalibration thread
+        self.gripper_calibaration = None # For the GripperCalibration thread
+        self.solver = None # For the PuzzleSolver thread
         
         # Open configuration file
         try:
@@ -62,6 +66,7 @@ class Ui(QMainWindow):
         self.setup_serpentine_photos_tab()
         self.setup_camera_calibration_tab()
         self.setup_gripper_calibration_tab()
+        self.setup_solve_puzzle_tab()
     
     def closeEvent(self, event):
         logging.debug(f"[Ui.closeEvent] closing main window")
@@ -95,6 +100,12 @@ class Ui(QMainWindow):
             logging.debug(f"[Ui.closeEvent] closing GripperCalibration thread")
             self.gripper_calibration.thread_closing.emit() # Tell the thread to exit its run loop
             self.gripper_calibration.wait() # Wait for the thread to close
+            
+        # Close the PuzzleSolver thread
+        if self.solver is not None:
+            logging.debug(f"[Ui.closeEvent] closing PuzzleSolver thread")
+            self.solver.thread_closing.emit() # Tell the thread to exit its run loop
+            self.solver.wait() # Wait for the thread to close
         
         # Continue closing the app
         logging.debug(f"[Ui.closeEvent] continuing to close")
@@ -554,6 +565,14 @@ class Ui(QMainWindow):
         os.makedirs(batch_dir)
         self.batch_number_textbox.setText(str(current_batch_number))
         
+        # Create solver photo directory and batch dir
+        solver_directory = os.path.join(os.path.abspath(os.path.join(photo_directory, os.path.pardir)), "SOLVER_PHOTOS")
+        if not solver_directory or not os.path.exists(solver_directory) or not os.path.isdir(solver_directory):
+            logger.error(f"[Ui.take_serpentine_photos] Solver directory does not exist at {solver_directory}")
+            return
+        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number))
+        os.makedirs(self.solver_batch_dir)
+        
         # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
         start_x = int(self.start_x_textbox.text())
         start_y = int(self.start_y_textbox.text())
@@ -610,6 +629,8 @@ class Ui(QMainWindow):
                 def on_capture(image_path):
                     # Remove this callback
                     self.camera.photo_captured.disconnect(on_capture)
+                    # Remember the image path
+                    self.last_serpentine_image_path = image_path
                     # Let the main thread know the move has finished
                     self.photo_capture_finished = True
                 self.camera.photo_captured.connect(on_capture)
@@ -620,6 +641,16 @@ class Ui(QMainWindow):
                 # Wait for the capture to finish
                 while not self.photo_capture_finished:
                     QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
+                
+                # Rotate and undistort the image and save it in the Solver dir
+                camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+                img = open_image_undistorted_and_rotated(self.last_serpentine_image_path, camera_matrix, distortion_coefficients)
+                solver_filename = os.path.basename(self.last_serpentine_image_path)
+                solver_img_path = os.path.join(self.solver_batch_dir, solver_filename)
+                cv.imwrite(solver_img_path, img)
+                #png_filename = os.path.splitext(os.path.basename(self.last_serpentine_image_path))[0] + ".png"
+                #solver_img_path = os.path.join(solver_batch_dir, png_filename)
+                #cv.imwrite(solver_img_path, img, [cv.IMWRITE_PNG_COMPRESSION, 6])
 
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
@@ -722,6 +753,7 @@ class Ui(QMainWindow):
 
         # Create a QPixmap from the image data
         pixmap = self.pixmap_from_image(image_path)
+        pixmap = pixmap.scaledToWidth(self.current_photo_caption_label.width(), Qt.SmoothTransformation)
 
         # If a photo is already present in the "current" photo label, move it to the "prior" photo label
         if self.current_photo_label.pixmap() is not None:
@@ -1275,6 +1307,53 @@ class Ui(QMainWindow):
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
             json.dump(self.config, jsonfile)
+
+
+    ################################################################################################
+    ################################################################################################
+    # "SOLVE PUZZLE" TAB
+    ################################################################################################
+    ################################################################################################
+    def setup_solve_puzzle_tab(self):
+        """Configure UI on the SOLVE PUZZLE tab"""
+        
+        # Configure serial output textarea to always scroll to the bottom
+        scrollbar = self.solve_puzzle_output_textarea.verticalScrollBar()
+        scrollbar.rangeChanged.connect(lambda minVal, maxVal: scrollbar.setValue(scrollbar.maximum()))
+        
+        # Get ready to log stdout lines coming from the solver into the textarea
+        @pyqtSlot(str)
+        def on_output_data(data):
+            data = data.replace("\n", "<br/>") # Change newlines to HTML linebreaks
+            self.solve_puzzle_output_textarea.insertHtml(f"{data}")
+        self.solver.output_data_ready.connect(on_output_data)
+        
+        # Configure buttons
+        
+        @pyqtSlot()
+        def compute_solution():
+            # Disable the UI while we're working on the solution
+            self.compute_solution_button.setEnabled(False)
+            self.set_clearcore_availability(False)
+            self.set_gripper_availability(False)
+
+            # Set up a callback to process the results
+            def on_results():
+                # Remove this callback
+                self.solver.solution_ready.disconnect(on_results)
+                # Re-enable the UI
+                self.compute_solution_button.setEnabled(True)
+                self.set_clearcore_availability(True)
+                self.set_gripper_availability(True)
+            # Connect the callback
+            self.solver.solution_ready.connect(on_results)
+            # Emit the trigger to start the computation
+            self.solver.trigger_solution_computation.emit(self.solver_batch_dir)
+        self.compute_solution_button.clicked.connect(compute_solution)
+        
+        # Start up a thread for the gripper calibration functionality
+        self.solver = PuzzleSolver(parent=self)
+        self.solver.start()
 
 
 def sigint_handler(*args):
