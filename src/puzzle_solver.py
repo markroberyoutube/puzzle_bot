@@ -48,7 +48,7 @@ class PuzzleSolver(QThread):
         self._thread_exiting = False
 
     @pyqtSlot(str)
-    def compute_solution(solver_batch_dir):
+    def compute_solution(self, solver_batch_dir):
         # Redirect STDOUT (used by Ryan's puzzle solver code) to emit to a textbox
         # Hijack stdout.write temporarily to intercept print statements
         self.old_write = sys.stdout.write
@@ -88,7 +88,7 @@ class PuzzleSolver(QThread):
 
         
     @pyqtSlot()
-    def move_pieces:
+    def move_pieces():
         pass
 
     @pyqtSlot()

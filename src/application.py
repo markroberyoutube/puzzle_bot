@@ -570,7 +570,7 @@ class Ui(QMainWindow):
         if not solver_directory or not os.path.exists(solver_directory) or not os.path.isdir(solver_directory):
             logger.error(f"[Ui.take_serpentine_photos] Solver directory does not exist at {solver_directory}")
             return
-        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number))
+        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number), "0_input")
         os.makedirs(self.solver_batch_dir)
         
         # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
@@ -1153,11 +1153,11 @@ class Ui(QMainWindow):
             self.gripper_calibration.gripper_calibration_results_ready.connect(on_results)
             
             # Trigger the gripper calibration routine
-            # gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
-            gripper_calibration_batch_directory = os.path.join(
-                "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
-                "3"
-            )
+            gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
+            # gripper_calibration_batch_directory = os.path.join(
+            #     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
+            #     "3"
+            # )
             camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
             self.gripper_calibration.trigger_gripper_calibration.emit(
                 gripper_calibration_batch_directory, 
@@ -1317,6 +1317,10 @@ class Ui(QMainWindow):
     def setup_solve_puzzle_tab(self):
         """Configure UI on the SOLVE PUZZLE tab"""
         
+        # Start up a thread for the gripper calibration functionality
+        self.solver = PuzzleSolver(parent=self)
+        self.solver.start()
+        
         # Configure serial output textarea to always scroll to the bottom
         scrollbar = self.solve_puzzle_output_textarea.verticalScrollBar()
         scrollbar.rangeChanged.connect(lambda minVal, maxVal: scrollbar.setValue(scrollbar.maximum()))
@@ -1348,12 +1352,18 @@ class Ui(QMainWindow):
             # Connect the callback
             self.solver.solution_ready.connect(on_results)
             # Emit the trigger to start the computation
-            self.solver.trigger_solution_computation.emit(self.solver_batch_dir)
+            #self.solver.trigger_solution_computation.emit(self.solver_batch_dir)
+            self.solver.trigger_solution_computation.emit(
+                os.path.join(
+                    "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/SOLVER_PHOTOS",
+                    "24",
+                    "0_input"
+                )
+            )
+            self.solver.trigger_solution_computation.emit(
+                
+            )
         self.compute_solution_button.clicked.connect(compute_solution)
-        
-        # Start up a thread for the gripper calibration functionality
-        self.solver = PuzzleSolver(parent=self)
-        self.solver.start()
 
 
 def sigint_handler(*args):
