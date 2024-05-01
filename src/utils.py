@@ -4,6 +4,11 @@ import cv2 as cv
 from scipy import stats
 import unicodedata
 
+LEFT_CROP_PIXELS = 20
+BOTTOM_CROP_PIXELS = 11
+RIGHT_CROP_PIXELS = 9
+TOP_CROP_PIXELS = 11
+
 def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coefficients):
     """Open image_path as an opencv image, undistort it, rotate if necessary, and return the image"""
     # Open the image using cv
@@ -13,10 +18,11 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
     camera_matrix = np.float32(camera_matrix)
     distortion_coefficients = np.float32(distortion_coefficients)
 
-    # Undistort the image
+    # Undistort the image (causes a black border to appear around the image.. will be cropped later in this function)
     img = cv.undistort(img, camera_matrix, distortion_coefficients)
 
     # If exif orientation information exists, rotate img accordingly
+    # Note that this rotation uses a matrix transformation so no information is lost
     try:
         with open(image_path, 'rb') as image_file:
             exif_img = exif.Image(image_file)
@@ -40,6 +46,14 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
     height, width, channels = img.shape
     if height > width:
         img = cv.rotate(img, cv.ROTATE_90_CLOCKWISE)
+    
+    # Finally crop the image to get rid of the empty space caused by the un-distortion
+    height, width, channels = img.shape # Get these again because rotate may have changed them!
+    start_row = TOP_CROP_PIXELS
+    end_row = height - BOTTOM_CROP_PIXELS
+    start_col = LEFT_CROP_PIXELS
+    end_col = width - RIGHT_CROP_PIXELS
+    img = img[start_row:end_row, start_col:end_col]
     
     return img
 

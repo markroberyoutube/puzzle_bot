@@ -85,7 +85,7 @@ class GalaxyS24(QThread):
 
             # Start the camera app. 
             # NOTE: It NEEDS to have been on the following settings the last time it was opened:
-            # PRO mode, 12Mp, ISO 100 (locked/yellow), Speed 1/30 (locked/yellow), 
+            # PRO mode, 12Mp, ISO 100 (locked/yellow), Speed 1/15 (locked/yellow), 
             # Focus manual (locked/yellow), White balance 5300k (locked/yellow),
             # Flash on (icon is yellow), 3:4 aspect ratio, Matrix metering, no timer, 
             # Intelligent optimization: maximum
@@ -98,10 +98,10 @@ class GalaxyS24(QThread):
             if not self.adb("adb shell input tap 768 1616", 1000)[0]: return
 
             # Click "Multi" to enable a multi-point auto focus (and wait 3 secs for camera to focus)
-            #if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
+            if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
             
             # Click "Center" to enable a center auto focus (and wait 3 secs for camera to focus)
-            if not self.adb("adb shell input tap 277 1592", 3000)[0]: return
+            #if not self.adb("adb shell input tap 277 1592", 3000)[0]: return
         
             # Click "Manual" to disable auto focus
             if not self.adb("adb shell input tap 799 1626", 1000)[0]: return

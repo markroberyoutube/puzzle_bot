@@ -570,7 +570,7 @@ class Ui(QMainWindow):
         if not solver_directory or not os.path.exists(solver_directory) or not os.path.isdir(solver_directory):
             logger.error(f"[Ui.take_serpentine_photos] Solver directory does not exist at {solver_directory}")
             return
-        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number), "0_input")
+        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number), "0_photos")
         os.makedirs(self.solver_batch_dir)
         
         # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
@@ -1356,12 +1356,9 @@ class Ui(QMainWindow):
             self.solver.trigger_solution_computation.emit(
                 os.path.join(
                     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/SOLVER_PHOTOS",
-                    "24",
-                    "0_input"
+                    "30",
+                    "0_photos"
                 )
-            )
-            self.solver.trigger_solution_computation.emit(
-                
             )
         self.compute_solution_button.clicked.connect(compute_solution)
 

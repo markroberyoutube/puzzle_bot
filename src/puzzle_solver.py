@@ -72,7 +72,7 @@ class PuzzleSolver(QThread):
         for f in os.listdir(input_dir):
             if f.endswith('.jpg') or f.endswith('.jpeg'):
                 print(f"{util.YELLOW}### Processing {f} ###{util.WHITE}")
-                robot_state = {}  # TODO
+                robot_state = [motor_x, motor_y]  # TODO
                 piece_id = process.process_photo(
                     photo_path = os.path.join(input_dir, f), 
                     working_dir = working_dir, 
@@ -81,8 +81,14 @@ class PuzzleSolver(QThread):
                 )
 
         print("Solving")
-        solve.solve(path=args.working_dir)
+        solution = solve.solve(path=args.working_dir)
         
+        puzzle_motor_origin = (20000, 50000)
+        for piece in solution:
+            motor_photo_origin_point, pixel_grip_point, angle, pixel_destination_point = piece
+            grip_motor_point = gripper_motor_coordinates(motor_photo_origin_point, pixel_grip_point)
+            move_piece(grip_motor_point, angle, motor_coordinates(puzzle_motor_origin, pixel_destination_point))
+
         # Put the original stdout back in place
         sys.stdout.write = self.old_write
 
