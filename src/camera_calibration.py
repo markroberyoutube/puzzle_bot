@@ -1,4 +1,4 @@
-import sys, os, logging, tempfile, math, glob
+import sys, os, logging, tempfile, math, glob, posixpath
 import cv2 as cv
 import numpy as np
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
@@ -48,7 +48,7 @@ class CameraCalibration(QThread):
     @pyqtSlot(str, str, list, list)
     def undistort_image(self, source_image_path, destination_image_path, camera_matrix, distortion_coefficients):
         # Make sure source path exists
-        if not source_image_path or not os.path.exists(source_image_path):
+        if not source_image_path or not posixpath.exists(source_image_path):
             logging.error(f"[CameraCalibration.undistort_image] Source image does not exist at: {source_image_path}")
             return
         
@@ -89,12 +89,12 @@ class CameraCalibration(QThread):
         distortion_coefficients = np.array(distortion_coefficients) #k1,k2,p1,p2[,k3[k4,k5,k6[,s1,s2,s3,s4[,tx,ty]]]]
         
         # Make sure photo directory exists
-        if not photo_directory or not os.path.exists(photo_directory) or not os.path.isdir(photo_directory):
+        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
             logging.error(f"[CameraCalibration.calibrate_camera] Calibration photo directory does not exist at: {photo_directory}")
             return
         
         # Make sure there are jpg files in that photo directory
-        photos = glob.glob(os.path.join(photo_directory, "*.jpg"))
+        photos = glob.glob(posixpath.join(photo_directory, "*.jpg"))
         if not photos or len(photos) == 0:
             logging.error(f"[CameraCalibration.calibrate_camera] No jpg files found in Calibration photo directory at: {photo_directory}")
             return
@@ -208,7 +208,7 @@ class CameraCalibration(QThread):
         thickness = 10
     
         # Make sure image path exists
-        if not image_path or not os.path.exists(image_path):
+        if not image_path or not posixpath.exists(image_path):
             logging.error(f"[CameraCalibration.measure_checkerboard_error] Image file does not exist at: {image_path}")
             return
         
@@ -277,7 +277,7 @@ class CameraCalibration(QThread):
         max_error_inches = max_error_px / px_per_inch
         
         # Save the annotated image to our temp dir
-        annotated_image_path = os.path.join(self.temp_dir, os.path.split(image_path)[-1])
+        annotated_image_path = posixpath.join(self.temp_dir, posixpath.split(image_path)[-1])
         cv.imwrite(annotated_image_path, img)
         
         # Let other threads know that the results are ready

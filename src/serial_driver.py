@@ -1,4 +1,4 @@
-import sys, logging
+import sys, logging, posixpath
 import serial
 from serial.tools import list_ports
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, QEventLoop

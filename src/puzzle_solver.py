@@ -1,4 +1,4 @@
-import sys, os, logging, tempfile, math, glob, json
+import sys, os, logging, tempfile, math, glob, json, posixpath
 from queue import Queue
 import cv2 as cv
 import numpy as np
@@ -9,7 +9,7 @@ from utils import estimate_linear_regression_coefficients
 
 # Add Ryan's code to our path
 sys.path.append(
-    os.path.join(os.path.abspath(os.pardir), "solver_library", "src")
+    posixpath.join(posixpath.abspath(posixpath.pardir), "solver_library", "src")
 )
 import process, solve
 from common import util
@@ -65,15 +65,15 @@ class PuzzleSolver(QThread):
         # Prepare working directories
         working_dir = solver_batch_working_dir
         for d in [PHOTO_BMP_DIR, SEGMENT_DIR, VECTOR_DIR, DEDUPED_DIR, CONNECTIVITY_DIR, SOLUTION_DIR]:
-            os.makedirs(os.path.join(working_dir, d), exist_ok=True)
-            for f in os.listdir(os.path.join(working_dir, d)):
-                os.remove(os.path.join(working_dir, d, f))
+            os.makedirs(posixpath.join(working_dir, d), exist_ok=True)
+            for f in os.listdir(posixpath.join(working_dir, d)):
+                os.remove(posixpath.join(working_dir, d, f))
         
         # Open batch info (prepared by the serpentine photo thread)
-        input_dir = os.path.join(working_dir, PHOTOS_DIR)
-        batch_info_file = os.path.join(input_dir, "batch.json")
+        input_dir = posixpath.join(working_dir, PHOTOS_DIR)
+        batch_info_file = posixpath.join(input_dir, "batch.json")
         batch_info = {}
-        if not os.path.exists(batch_info_file):
+        if not posixpath.exists(batch_info_file):
             logging.error(f"[Ui.compute_solution]: batch info file does not exist at {batch_info_file}")
             return
         with open(batch_info_file, "r") as jsonfile:
@@ -96,7 +96,7 @@ class PuzzleSolver(QThread):
 
                 # Process the photo
                 piece_id = process.process_photo(
-                    photo_path = os.path.join(input_dir, f),
+                    photo_path = posixpath.join(input_dir, f),
                     working_dir = working_dir,
                     starting_piece_id = piece_id,
                     robot_state = robot_state

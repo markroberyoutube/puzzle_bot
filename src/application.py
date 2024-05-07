@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, threading, time, signal, shutil
+import sys, os, threading, time, signal, shutil, posixpath
 import exif, json, math, argparse, tempfile
 from glob import glob
 import cv2 as cv
@@ -23,7 +23,7 @@ from puzzle_solver import PuzzleSolver
 
 # Add Ryan's code to our path
 sys.path.append(
-    os.path.join(os.path.abspath(os.pardir), "solver_library", "src")
+    posixpath.join(posixpath.abspath(posixpath.pardir), "solver_library", "src")
 )
 import process, solve
 from common import util
@@ -42,7 +42,7 @@ APPLICATION_NAME = "Puzzlin' Pete"
 class Ui(QMainWindow):
     def __init__(self, argv):
         super(Ui, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(os.path.join("qt", "application.ui"), self) # Load the .ui file
+        uic.loadUi(posixpath.join("qt", "application.ui"), self) # Load the .ui file
         self.setWindowTitle(APPLICATION_NAME) # Set window name (works on MS Windows)
         self.show() # Show the GUI
 
@@ -64,7 +64,7 @@ class Ui(QMainWindow):
             logging.error(f"[Ui.init] Config file not specified in arguments: {e}")
             sys.exit()
             return
-        if not self.config_file_path or not os.path.exists(self.config_file_path):
+        if not self.config_file_path or not posixpath.exists(self.config_file_path):
             logging.debug(f"[Ui.init] Creating config file at: {self.config_file_path}")
             self.config = {}
             # Write self.config to a JSON-formatted config file
@@ -171,7 +171,7 @@ class Ui(QMainWindow):
         preselected_filepath = textbox.text()
         directory = ''
         if preselected_filepath:
-            directory = os.path.split(preselected_filepath)[0]
+            directory = posixpath.split(preselected_filepath)[0]
         new_filepath, filter = QFileDialog.getOpenFileName(self, 
             "Open Image",
             directory,
@@ -559,29 +559,29 @@ class Ui(QMainWindow):
         
         # Make sure the photo directory exists
         photo_directory = self.serpentine_photo_directory_textbox.text()
-        if not photo_directory or not os.path.exists(photo_directory) or not os.path.isdir(photo_directory):
+        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
             logger.error(f"[Ui.take_serpentine_photos] Photo directory does not exist at {photo_directory}")
             return
         
         # Auto-generate the next batch directory (they are numbered sequentially)
         last_batch_number = 0
-        sub_dirs = [d for d in os.listdir(photo_directory) if os.path.isdir(os.path.join(photo_directory, d))]
+        sub_dirs = [d for d in os.listdir(photo_directory) if posixpath.isdir(posixpath.join(photo_directory, d))]
         batch_dirs = [d for d in sub_dirs if d.isnumeric()]
         batch_dirs.sort(key=int) # sorts in place
         if batch_dirs:
             last_batch_number = int(batch_dirs[-1])
         current_batch_number = last_batch_number + 1
-        batch_dir = os.path.join(photo_directory, str(current_batch_number))
+        batch_dir = posixpath.join(photo_directory, str(current_batch_number))
         os.makedirs(batch_dir)
         self.batch_number_textbox.setText(str(current_batch_number))
         
         # Create solver photo directory and batch dir
         solver_directory = self.solver_directory_textbox.text()
-        #solver_directory = os.path.join(os.path.abspath(os.path.join(photo_directory, os.path.pardir)), "SOLVER_PHOTOS")
-        if not solver_directory or not os.path.exists(solver_directory) or not os.path.isdir(solver_directory):
+        #solver_directory = posixpath.join(posixpath.abspath(posixpath.join(photo_directory, posixpath.pardir)), "SOLVER_PHOTOS")
+        if not solver_directory or not posixpath.exists(solver_directory) or not posixpath.isdir(solver_directory):
             logger.error(f"[Ui.take_serpentine_photos] Solver directory does not exist at {solver_directory}")
             return
-        self.solver_batch_photos_dir = os.path.join(solver_directory, str(current_batch_number), "0_photos")
+        self.solver_batch_photos_dir = posixpath.join(solver_directory, str(current_batch_number), "0_photos")
         os.makedirs(self.solver_batch_photos_dir)
         
         # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
@@ -656,19 +656,19 @@ class Ui(QMainWindow):
                 # Rotate and undistort the image and save it in the Solver dir
                 camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
                 img = open_image_undistorted_and_rotated(self.last_serpentine_image_path, camera_matrix, distortion_coefficients)
-                solver_filename = os.path.basename(self.last_serpentine_image_path)
-                solver_img_path = os.path.join(self.solver_batch_photos_dir, solver_filename)
+                solver_filename = posixpath.basename(self.last_serpentine_image_path)
+                solver_img_path = posixpath.join(self.solver_batch_photos_dir, solver_filename)
                 cv.imwrite(solver_img_path, img)
-                #png_filename = os.path.splitext(os.path.basename(self.last_serpentine_image_path))[0] + ".png"
-                #solver_img_path = os.path.join(solver_batch_photos_dir, png_filename)
+                #png_filename = posixpath.splitext(posixpath.basename(self.last_serpentine_image_path))[0] + ".png"
+                #solver_img_path = posixpath.join(solver_batch_photos_dir, png_filename)
                 #cv.imwrite(solver_img_path, img, [cv.IMWRITE_PNG_COMPRESSION, 6])
 
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
         
         # After all photos have been taken, copy the batch_info.json file into the solver batch dir
-        batch_info_file = os.path.join(batch_dir, "batch.json")
-        destination_file = os.path.join(self.solver_batch_photos_dir, "batch.json")
+        batch_info_file = posixpath.join(batch_dir, "batch.json")
+        destination_file = posixpath.join(self.solver_batch_photos_dir, "batch.json")
         shutil.copyfile(batch_info_file, destination_file)
         
         # After all photos have been taken, reset the START button action
@@ -710,7 +710,7 @@ class Ui(QMainWindow):
             logger.error(f"[Ui.take_serpentine_photo] Invalid batch directory: {batch_dir}")
             return
         try:
-            if not batch_dir or not os.path.exists(batch_dir):
+            if not batch_dir or not posixpath.exists(batch_dir):
                 os.makedirs(batch_dir)
         except Exception as e:
             logger.error(f"[Ui.take_serpentine_photo] Could not create batch directory at {batch_dir}: {e}")
@@ -736,16 +736,16 @@ class Ui(QMainWindow):
         """Save the position and path info to the batch JSON file"""
         
         # Open up an existing (or create a new) batch JSON file
-        batch_info_file = os.path.join(batch_dir, "batch.json")
+        batch_info_file = posixpath.join(batch_dir, "batch.json")
         batch_info = {}
-        if batch_info_file and os.path.exists(batch_info_file):
+        if batch_info_file and posixpath.exists(batch_info_file):
             with open(batch_info_file, "r") as jsonfile:
                 batch_info = json.load(jsonfile)
         
         # Add info about the new photo to the batch_info
         if batch_info.get('photos', None) is None:
             batch_info['photos'] = []
-        file_name = os.path.split(image_path)[-1]
+        file_name = posixpath.split(image_path)[-1]
         batch_info['photos'].append(
             dict(file_name=file_name, position=position)
         )
@@ -782,7 +782,7 @@ class Ui(QMainWindow):
         self.current_photo_label.setPixmap(pixmap)
         self.current_photo_label.setAlignment(Qt.AlignCenter) # Center (letterbox) the image
         #self.current_photo_label.setScaledContents(True) # Removed for now because it changes the aspect ratio
-        image_filename = os.path.split(image_path)[-1]
+        image_filename = posixpath.split(image_path)[-1]
         self.current_photo_caption_label.setText(f"{image_filename} ({caption})")
 
     def read_serpentine_config(self):
@@ -859,7 +859,7 @@ class Ui(QMainWindow):
     def measure_checkerboard_error(self, image_path, rms_error_textbox, max_error_textbox, annotated_image_label_area):
         """Find features in an image, fit lines to the rows and columns, and measure error of that fit"""
         # Make sure the selected image exists
-        if not image_path or not os.path.exists(image_path):
+        if not image_path or not posixpath.exists(image_path):
             logger.error(f"[Ui.measure_checkerboard_error] File does not exist at image_path")
             return
         
@@ -1121,7 +1121,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_gripper_calibration_start_photo():
-            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "start.jpg")
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "start.jpg")
             self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.gripper_calibration_start_x_textbox.text())
@@ -1132,7 +1132,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_camera_delta_photo():
-            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "camera_delta.jpg")
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "camera_delta.jpg")
             self.take_photo(destination_photo_path, self.camera_delta_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.camera_delta_x_textbox.text())
@@ -1143,7 +1143,7 @@ class Ui(QMainWindow):
         
         @pyqtSlot()
         def take_gripper_delta_photo():
-            destination_photo_path = os.path.join(self.get_gripper_calibration_batch_dir(), "gripper_delta.jpg")
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "gripper_delta.jpg")
             self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
             # Remember where this photo was taken
             x = parse_int(self.gripper_delta_x_textbox.text())
@@ -1170,7 +1170,7 @@ class Ui(QMainWindow):
             
             # Trigger the gripper calibration routine
             gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
-            # gripper_calibration_batch_directory = os.path.join(
+            # gripper_calibration_batch_directory = posixpath.join(
             #     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
             #     "3"
             # )
@@ -1191,7 +1191,7 @@ class Ui(QMainWindow):
         # Get the main gripper calibration directory from the config data
         photo_directory = self.config.get('gripper_calibration_photo_directory', '')
         
-        if not photo_directory or not os.path.exists(photo_directory) or not os.path.isdir(photo_directory):
+        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
             logging.error(f"[Ui.get_gripper_calibration_batch_dir] Gripper photo directory does not exist at: photo_directory")
             return
         
@@ -1200,16 +1200,16 @@ class Ui(QMainWindow):
         batch_number_text = self.gripper_calibration_photo_batch_number_textbox.text().strip()
         if batch_number_text and batch_number_text.isnumeric():
             current_batch_number = int(batch_number_text)
-            batch_dir = os.path.join(photo_directory, str(current_batch_number))
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
         else:
             last_batch_number = 0
-            sub_dirs = [d for d in os.listdir(photo_directory) if os.path.isdir(os.path.join(photo_directory, d))]
+            sub_dirs = [d for d in os.listdir(photo_directory) if posixpath.isdir(posixpath.join(photo_directory, d))]
             batch_dirs = [d for d in sub_dirs if d.isnumeric()]
             batch_dirs.sort(key=int) # sorts in place
             if batch_dirs:
                 last_batch_number = int(batch_dirs[-1])
             current_batch_number = last_batch_number + 1
-            batch_dir = os.path.join(photo_directory, str(current_batch_number))
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
             os.makedirs(batch_dir)
             self.gripper_calibration_photo_batch_number_textbox.setText(str(current_batch_number))
         
@@ -1217,14 +1217,14 @@ class Ui(QMainWindow):
         return batch_dir
     
     def update_gripper_calibration_info(self, data_dict):
-        gripper_calibration_info_filepath = os.path.join(
+        gripper_calibration_info_filepath = posixpath.join(
             self.get_gripper_calibration_batch_dir(), 
             "gripper_calibration_info.json"
         )
 
         # Open up an existing (or create a new) batch JSON file
         gripper_calibration_info = {}
-        if gripper_calibration_info_filepath and os.path.exists(gripper_calibration_info_filepath):
+        if gripper_calibration_info_filepath and posixpath.exists(gripper_calibration_info_filepath):
             with open(gripper_calibration_info_filepath, "r") as jsonfile:
                 gripper_calibration_info = json.load(jsonfile)
         
@@ -1267,7 +1267,7 @@ class Ui(QMainWindow):
     def take_photo(self, destination_photo_path, label_area):
         """Take a photo using the Galaxy S24, store it at the specified path, and display it in the label area"""
         # Determine destination dir and filename from given path
-        destination_photo_dir, destination_photo_filename = os.path.split(destination_photo_path)
+        destination_photo_dir, destination_photo_filename = posixpath.split(destination_photo_path)
                 
         # Set up a callback to display the photo once it has been taken
         @pyqtSlot(str)
@@ -1380,12 +1380,12 @@ class Ui(QMainWindow):
             # Find the most recent batch directory
             solver_dir = self.solver_directory_textbox.text()
             last_batch_number = 0
-            sub_dirs = [d for d in os.listdir(solver_dir) if os.path.isdir(os.path.join(solver_dir, d))]
+            sub_dirs = [d for d in os.listdir(solver_dir) if posixpath.isdir(posixpath.join(solver_dir, d))]
             batch_dirs = [d for d in sub_dirs if d.isnumeric()]
             batch_dirs.sort(key=int) # sorts in place
             if batch_dirs:
                 last_batch_number = int(batch_dirs[-1])
-            solver_batch_working_dir = os.path.join(solver_dir, str(last_batch_number))
+            solver_batch_working_dir = posixpath.join(solver_dir, str(last_batch_number))
             
             # Emit the trigger to start the computation
             self.solver.trigger_solution_computation.emit(solver_batch_working_dir)
@@ -1403,20 +1403,20 @@ class Ui(QMainWindow):
             # Find the most recent batch directory
             solver_dir = self.solver_directory_textbox.text()
             last_batch_number = 0
-            sub_dirs = [d for d in os.listdir(solver_dir) if os.path.isdir(os.path.join(solver_dir, d))]
+            sub_dirs = [d for d in os.listdir(solver_dir) if posixpath.isdir(posixpath.join(solver_dir, d))]
             batch_dirs = [d for d in sub_dirs if d.isnumeric()]
             batch_dirs.sort(key=int) # sorts in place
             if batch_dirs:
                 last_batch_number = int(batch_dirs[-1])
-            solver_batch_working_dir = os.path.join(solver_dir, str(last_batch_number))
+            solver_batch_working_dir = posixpath.join(solver_dir, str(last_batch_number))
             
             # Compile all of the solution data into one easy to parse data structure (array of dicts)
-            solution_dir = os.path.join(solver_batch_working_dir, SOLUTION_DIR)
+            solution_dir = posixpath.join(solver_batch_working_dir, SOLUTION_DIR)
             files = glob("*.json", root_dir=solution_dir)
             solution = []
             for piece_info_filename in files:
-                piece_number = os.path.splitext(piece_info_filename)[0]
-                with open(os.path.join(solution_dir, piece_info_filename), "r") as jsonfile:
+                piece_number = posixpath.splitext(piece_info_filename)[0]
+                with open(posixpath.join(solution_dir, piece_info_filename), "r") as jsonfile:
                     piece_info = json.load(jsonfile)
                     solution.append(piece_info)
             
@@ -1547,7 +1547,7 @@ def main():
             from Foundation import NSBundle
             bundle = NSBundle.mainBundle()
             if bundle:
-                app_name = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+                app_name = posixpath.splitext(posixpath.basename(sys.argv[0]))[0]
                 app_info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
                 if app_info:
                     app_info['CFBundleName'] = APPLICATION_NAME

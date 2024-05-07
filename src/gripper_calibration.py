@@ -1,4 +1,4 @@
-import sys, os, logging, tempfile, math, glob
+import sys, os, logging, tempfile, math, glob, posixpath
 import cv2 as cv
 import numpy as np
 import json
@@ -153,13 +153,13 @@ class GripperCalibration(QThread):
 
         # Define data input paths
         batch_dir = gripper_calibration_batch_directory
-        start_image_path = os.path.join(batch_dir, "start.jpg")
-        camera_delta_image_path = os.path.join(batch_dir, "camera_delta.jpg")
-        gripper_delta_image_path = os.path.join(batch_dir, "gripper_delta.jpg")
-        batch_info_path = os.path.join(batch_dir, "gripper_calibration_info.json")
+        start_image_path = posixpath.join(batch_dir, "start.jpg")
+        camera_delta_image_path = posixpath.join(batch_dir, "camera_delta.jpg")
+        gripper_delta_image_path = posixpath.join(batch_dir, "gripper_delta.jpg")
+        batch_info_path = posixpath.join(batch_dir, "gripper_calibration_info.json")
         
         # Define data output paths
-        output_image_path = os.path.join(batch_dir, "gripper_calibration_output.jpg")
+        output_image_path = posixpath.join(batch_dir, "gripper_calibration_output.jpg")
     
         # Open the config file
         batch_info = None
@@ -215,7 +215,7 @@ class GripperCalibration(QThread):
             if debug:
                 cv.imshow('start', start_img)
                 cv.waitKey(1)
-        cv.imwrite(os.path.join(batch_dir, "start-annotated.jpg"), start_img)
+        cv.imwrite(posixpath.join(batch_dir, "start-annotated.jpg"), start_img)
     
         # Draw blue circles on the camera delta chessboard
         for point in camera_delta_chessboard:
@@ -224,7 +224,7 @@ class GripperCalibration(QThread):
             if debug:
                 cv.imshow('camera_delta', camera_delta_img)
                 cv.waitKey(1)
-        cv.imwrite(os.path.join(batch_dir, "camera-delta-annotated.jpg"), camera_delta_img)
+        cv.imwrite(posixpath.join(batch_dir, "camera-delta-annotated.jpg"), camera_delta_img)
     
         # Draw pink circles on the gripper delta chessboard
         for point in gripper_delta_chessboard:
@@ -233,7 +233,7 @@ class GripperCalibration(QThread):
             if debug:
                 cv.imshow('gripper_delta', gripper_delta_img)
                 cv.waitKey(1)
-        cv.imwrite(os.path.join(batch_dir, "gripper-delta-annotated.jpg"), gripper_delta_img)
+        cv.imwrite(posixpath.join(batch_dir, "gripper-delta-annotated.jpg"), gripper_delta_img)
     
         # Calculate motor_counts / px in both x and y. We do this for x by averaging the delta_x values
         # for all corresponding points, and then taking delta_x_motor_counts / delta_x_px

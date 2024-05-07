@@ -1,4 +1,4 @@
-import sys, os, logging, subprocess
+import sys, os, logging, subprocess, posixpath
 from datetime import datetime
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
 
@@ -59,7 +59,7 @@ class GalaxyS24(QThread):
         """Capture a photo and save it to batch_dir as a timestamped filename"""
         
         # Ensure parent dir exists
-        if not os.path.exists(batch_dir):
+        if not posixpath.exists(batch_dir):
             logging.error(f"[GalaxyS24.capture_photo] Photo dir does not exist: {batch_dir}")
             return
         
@@ -114,10 +114,10 @@ class GalaxyS24(QThread):
         retcode, stdout = self.adb("adb shell ls -clr /sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
         if not retcode: return
         remote_photo_path = stdout.decode('ascii').strip()
-        remote_file_name = os.path.split(remote_photo_path)[-1]
+        remote_file_name = posixpath.split(remote_photo_path)[-1]
 
         # Download that photo
-        local_photo_path = os.path.join(batch_dir, remote_file_name)
+        local_photo_path = posixpath.join(batch_dir, remote_file_name)
         retcode, stdout = self.adb(f"adb pull -a '{remote_photo_path}' '{local_photo_path}'", 0)
         if not retcode: return
             
@@ -129,13 +129,13 @@ class GalaxyS24(QThread):
         """Capture a screenshot and save it to screenshot_dir with a timestamped filename"""
         
         # Ensure screenshot_dir exists
-        if not os.path.exists(screenshot_dir):
+        if not posixpath.exists(screenshot_dir):
             logging.error(f"[GalaxyS24.capture_screenshot] Screenshot dir does not exist: {screenshot_dir}")
             return
         
         # Capture the screenshot
         screenshot_filename = datetime.now().strftime("%Y-%m-%d-%H%M%S") + ".png"
-        screenshot_path = os.path.join(screenshot_dir, screenshot_filename)
+        screenshot_path = posixpath.join(screenshot_dir, screenshot_filename)
         logging.debug("[GalaxyS24.capture_screenshot] Taking screenshot...")
         if not self.adb(f"adb exec-out screencap -p > {screenshot_path}", 0)[0]: return
 
