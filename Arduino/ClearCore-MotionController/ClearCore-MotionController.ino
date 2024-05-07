@@ -100,7 +100,7 @@ bool homed = false;
 const int minX = 0;
 const int maxX = 397000;
 const int minY = 0;
-const int maxY = 800000;
+const int maxY = 808000;
 const int minZ = 0;
 const int maxZ = 136000;  //150000; changed by Ian based on not wanting to push on the table any more than necessary
 
