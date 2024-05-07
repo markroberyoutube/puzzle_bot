@@ -207,8 +207,8 @@ class Ui(QMainWindow):
         # Set all inputs as unavailable until we're connected to the ClearCore and Gripper
         self.set_clearcore_availability(False)
         self.set_gripper_availability(False)
-        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br/>")
-        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening Gripper...</font><br/>")
+        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening ClearCore...</font><br />")
+        self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Opening Gripper...</font><br />")
         
         # Connect to the ClearCore over serial
         self.clearcore = ClearCore(parent=self)
@@ -260,9 +260,9 @@ class Ui(QMainWindow):
         def on_clearcore_open(port_status):
             if (port_status):
                 self.set_clearcore_availability(True)
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>ClearCore opened!</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>ClearCore opened!</font><br />")
             else:
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening ClearCore.</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening ClearCore.</font><br />")
         self.clearcore.port_opened.connect(on_clearcore_open)
         
         # Wait 2 seconds for the Arduino to reset before we make any writes to it
@@ -270,9 +270,9 @@ class Ui(QMainWindow):
         def on_gripper_open(port_status):
             if (port_status):
                 self.set_gripper_availability(True)
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Gripper opened!</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Gripper opened!</font><br />")
             else:
-                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening Gripper.</font><br/>")
+                self.clearcore_serial_output_textarea.insertHtml("<font style='font-weight: bold;'>Error opening Gripper.</font><br />")
         self.gripper.port_opened.connect(on_gripper_open)
 
     @pyqtSlot(str)
@@ -306,9 +306,9 @@ class Ui(QMainWindow):
         red = "#ff3300"
         green = "#009900"
         if status == "SUCCESS":
-            html_line += f"<font style='color: {green};'>GRIPPER {status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {green};'>GRIPPER {status}:</font> {message}<br />"
         else:
-            html_line += f"<font style='color: {red};'>GRIPPER {status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {red};'>GRIPPER {status}:</font> {message}<br />"
         self.clearcore_serial_output_textarea.insertHtml(html_line) 
 
     def set_gripper_availability(self, enabled=True):
@@ -412,9 +412,9 @@ class Ui(QMainWindow):
         red = "#ff3300"
         green = "#009900"
         if status in ["SUCCESS", "GO"]:
-            html_line += f"<font style='color: {green};'>{status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {green};'>{status}:</font> {message}<br />"
         else:
-            html_line += f"<font style='color: {red};'>{status}:</font> {message}<br/>"
+            html_line += f"<font style='color: {red};'>{status}:</font> {message}<br />"
         self.clearcore_serial_output_textarea.insertHtml(html_line)
 
     def set_clearcore_availability(self, enabled=True):
@@ -1350,7 +1350,7 @@ class Ui(QMainWindow):
         # Get ready to log stdout lines coming from the solver into the textarea
         @pyqtSlot(str)
         def on_output_data(data):
-            data = data.replace("\n", "<br/>") # Change newlines to HTML linebreaks
+            data = data.replace("\n", "<br />") # Change newlines to HTML linebreaks
             self.solve_puzzle_output_textarea.insertHtml(f"{data}")
         self.solver.output_data_ready.connect(on_output_data)
         
