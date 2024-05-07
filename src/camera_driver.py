@@ -104,7 +104,7 @@ class GalaxyS24(QThread):
             #if not self.adb("adb shell input tap 277 1592", 3000)[0]: return
         
             # Click "Manual" to disable auto focus
-            if not self.adb("adb shell input tap 799 1626", 1000)[0]: return
+            #if not self.adb("adb shell input tap 799 1626", 1000)[0]: return
 
         # Take the photo (Tap the shutter button) and wait 2 seconds for the camera to take the photo
         logging.debug("[GalaxyS24.capture_photo] Taking photo...")
