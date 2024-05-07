@@ -669,7 +669,7 @@ class Ui(QMainWindow):
         # After all photos have been taken, copy the batch_info.json file into the solver batch dir
         batch_info_file = os.path.join(batch_dir, "batch.json")
         destination_file = os.path.join(self.solver_batch_photos_dir, "batch.json")
-        shutil.copyfile(src, dst)
+        shutil.copyfile(batch_info_file, destination_file)
         
         # After all photos have been taken, reset the START button action
         self.serpentine_start_button.clicked.connect(self.take_serpentine_photos)
