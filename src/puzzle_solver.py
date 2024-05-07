@@ -9,7 +9,7 @@ from utils import estimate_linear_regression_coefficients
 
 # Add Ryan's code to our path
 sys.path.append(
-    posixpath.join(posixpath.abspath(posixpath.pardir), "solver_library", "src")
+    posixpath.join(posixpath.pardir, "solver_library", "src")
 )
 import process, solve
 from common import util

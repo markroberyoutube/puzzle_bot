@@ -23,7 +23,7 @@ from puzzle_solver import PuzzleSolver
 
 # Add Ryan's code to our path
 sys.path.append(
-    posixpath.join(posixpath.abspath(posixpath.pardir), "solver_library", "src")
+    posixpath.join(posixpath.pardir, "solver_library", "src")
 )
 import process, solve
 from common import util
