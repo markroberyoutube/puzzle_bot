@@ -1,7 +1,9 @@
-import sys, os, logging, tempfile, math, glob
+import sys, os, logging, tempfile, math, glob, json
+from queue import Queue
 import cv2 as cv
 import numpy as np
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread, QObject
+from PyQt5.QtWidgets import QApplication
 
 from utils import estimate_linear_regression_coefficients
 
@@ -48,7 +50,7 @@ class PuzzleSolver(QThread):
         self._thread_exiting = False
 
     @pyqtSlot(str)
-    def compute_solution(self, solver_batch_dir):
+    def compute_solution(self, solver_batch_working_dir):
         # Redirect STDOUT (used by Ryan's puzzle solver code) to emit to a textbox
         # Hijack stdout.write temporarily to intercept print statements
         self.old_write = sys.stdout.write
@@ -61,37 +63,53 @@ class PuzzleSolver(QThread):
         # Call Ryan's code
         
         # Prepare working directories
-        input_dir = solver_batch_dir
-        working_dir = solver_batch_dir
+        working_dir = solver_batch_working_dir
         for d in [PHOTO_BMP_DIR, SEGMENT_DIR, VECTOR_DIR, DEDUPED_DIR, CONNECTIVITY_DIR, SOLUTION_DIR]:
             os.makedirs(os.path.join(working_dir, d), exist_ok=True)
             for f in os.listdir(os.path.join(working_dir, d)):
                 os.remove(os.path.join(working_dir, d, f))
+        
+        # Open batch info (prepared by the serpentine photo thread)
+        input_dir = os.path.join(working_dir, PHOTOS_DIR)
+        batch_info_file = os.path.join(input_dir, "batch.json")
+        batch_info = {}
+        if not os.path.exists(batch_info_file):
+            logging.error(f"[Ui.compute_solution]: batch info file does not exist at {batch_info_file}")
+            return
+        with open(batch_info_file, "r") as jsonfile:
+            batch_info = json.load(jsonfile)
                 
+        # Process the photos one by one
         piece_id = 1
         for f in os.listdir(input_dir):
+            # Handle thread exit in this long running process.
+            if self._thread_exiting: return
+            # Process the photo
             if f.endswith('.jpg') or f.endswith('.jpeg'):
                 print(f"{util.YELLOW}### Processing {f} ###{util.WHITE}")
-                robot_state = [motor_x, motor_y]  # TODO
+
+                # Find the motor position this photo was taken at
+                photo_info = [p for p in batch_info['photos'] if p['file_name'] == f][0]
+                robot_state = {'photo_at_motor_position': photo_info['position']}
+                
+                QApplication.processEvents()
+
+                # Process the photo
                 piece_id = process.process_photo(
-                    photo_path = os.path.join(input_dir, f), 
-                    working_dir = working_dir, 
-                    starting_piece_id = piece_id, 
+                    photo_path = os.path.join(input_dir, f),
+                    working_dir = working_dir,
+                    starting_piece_id = piece_id,
                     robot_state = robot_state
                 )
 
         print("Solving")
-        solution = solve.solve(path=args.working_dir)
+        solve.solve(path=working_dir)
         
-        puzzle_motor_origin = (20000, 50000)
-        for piece in solution:
-            motor_photo_origin_point, pixel_grip_point, angle, pixel_destination_point = piece
-            grip_motor_point = gripper_motor_coordinates(motor_photo_origin_point, pixel_grip_point)
-            move_piece(grip_motor_point, angle, motor_coordinates(puzzle_motor_origin, pixel_destination_point))
-
         # Put the original stdout back in place
         sys.stdout.write = self.old_write
-
+        
+        # Tell other threads that the solution has been found
+        self.solution_ready.emit()
         
     @pyqtSlot()
     def move_pieces():
@@ -108,5 +126,6 @@ class PuzzleSolver(QThread):
 
         # Currently the run loop does nothing other than sleep
         while (not self._thread_exiting):
-            self.msleep(100) # Delay 100 ms using QThread's version of sleep
+            self.msleep(10) # Delay 10 ms using QThread's version of sleep
+            QApplication.processEvents()
 

@@ -9,6 +9,9 @@ from utils import minimum_distance, get_escape_points, get_intersect, order_rect
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
+# from the Miranda motor datasheet: https://www.mouser.com/pdfDocs/201215miranda-manual-ovz20008_rev5.pdf
+ROTATION_MOTOR_COUNTS_PER_DEGREE = 182
+
 class GripperCalibration(QThread):
     """"Gripper Calibration
 

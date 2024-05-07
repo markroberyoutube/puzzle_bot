@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import sys, os, threading, time, signal
+import sys, os, threading, time, signal, shutil
 import exif, json, math, argparse, tempfile
+from glob import glob
 import cv2 as cv
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
@@ -17,8 +18,17 @@ from utils import parse_int, open_image_undistorted_and_rotated
 from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
-from gripper_calibration import GripperCalibration
+from gripper_calibration import GripperCalibration, ROTATION_MOTOR_COUNTS_PER_DEGREE
 from puzzle_solver import PuzzleSolver
+
+# Add Ryan's code to our path
+sys.path.append(
+    os.path.join(os.path.abspath(os.pardir), "solver_library", "src")
+)
+import process, solve
+from common import util
+from common.config import *
+
 
 APPLICATION_NAME = "Puzzlin' Pete"
 
@@ -566,12 +576,13 @@ class Ui(QMainWindow):
         self.batch_number_textbox.setText(str(current_batch_number))
         
         # Create solver photo directory and batch dir
-        solver_directory = os.path.join(os.path.abspath(os.path.join(photo_directory, os.path.pardir)), "SOLVER_PHOTOS")
+        solver_directory = self.solver_directory_textbox.text()
+        #solver_directory = os.path.join(os.path.abspath(os.path.join(photo_directory, os.path.pardir)), "SOLVER_PHOTOS")
         if not solver_directory or not os.path.exists(solver_directory) or not os.path.isdir(solver_directory):
             logger.error(f"[Ui.take_serpentine_photos] Solver directory does not exist at {solver_directory}")
             return
-        self.solver_batch_dir = os.path.join(solver_directory, str(current_batch_number), "0_photos")
-        os.makedirs(self.solver_batch_dir)
+        self.solver_batch_photos_dir = os.path.join(solver_directory, str(current_batch_number), "0_photos")
+        os.makedirs(self.solver_batch_photos_dir)
         
         # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
         start_x = int(self.start_x_textbox.text())
@@ -646,14 +657,19 @@ class Ui(QMainWindow):
                 camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
                 img = open_image_undistorted_and_rotated(self.last_serpentine_image_path, camera_matrix, distortion_coefficients)
                 solver_filename = os.path.basename(self.last_serpentine_image_path)
-                solver_img_path = os.path.join(self.solver_batch_dir, solver_filename)
+                solver_img_path = os.path.join(self.solver_batch_photos_dir, solver_filename)
                 cv.imwrite(solver_img_path, img)
                 #png_filename = os.path.splitext(os.path.basename(self.last_serpentine_image_path))[0] + ".png"
-                #solver_img_path = os.path.join(solver_batch_dir, png_filename)
+                #solver_img_path = os.path.join(solver_batch_photos_dir, png_filename)
                 #cv.imwrite(solver_img_path, img, [cv.IMWRITE_PNG_COMPRESSION, 6])
 
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
+        
+        # After all photos have been taken, copy the batch_info.json file into the solver batch dir
+        batch_info_file = os.path.join(batch_dir, "batch.json")
+        destination_file = os.path.join(self.solver_batch_photos_dir, "batch.json")
+        shutil.copyfile(src, dst)
         
         # After all photos have been taken, reset the START button action
         self.serpentine_start_button.clicked.connect(self.take_serpentine_photos)
@@ -1321,9 +1337,15 @@ class Ui(QMainWindow):
         self.solver = PuzzleSolver(parent=self)
         self.solver.start()
         
+        # Read the config file and update all textboxes
+        self.read_solver_config()
+        
         # Configure serial output textarea to always scroll to the bottom
         scrollbar = self.solve_puzzle_output_textarea.verticalScrollBar()
         scrollbar.rangeChanged.connect(lambda minVal, maxVal: scrollbar.setValue(scrollbar.maximum()))
+        
+        # Configure all textboxes to auto-save config file upon change
+        self.solver_directory_textbox.textChanged.connect(self.write_solver_config)
         
         # Get ready to log stdout lines coming from the solver into the textarea
         @pyqtSlot(str)
@@ -1333,6 +1355,9 @@ class Ui(QMainWindow):
         self.solver.output_data_ready.connect(on_output_data)
         
         # Configure buttons
+        self.solver_directory_browse_button.clicked.connect(
+            lambda: self.browse_for_directory(self.solver_directory_textbox)
+        )
         
         @pyqtSlot()
         def compute_solution():
@@ -1351,16 +1376,160 @@ class Ui(QMainWindow):
                 self.set_gripper_availability(True)
             # Connect the callback
             self.solver.solution_ready.connect(on_results)
+            
+            # Find the most recent batch directory
+            solver_dir = self.solver_directory_textbox.text()
+            last_batch_number = 0
+            sub_dirs = [d for d in os.listdir(solver_dir) if os.path.isdir(os.path.join(solver_dir, d))]
+            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+            batch_dirs.sort(key=int) # sorts in place
+            if batch_dirs:
+                last_batch_number = int(batch_dirs[-1])
+            solver_batch_working_dir = os.path.join(solver_dir, str(last_batch_number))
+            
             # Emit the trigger to start the computation
-            #self.solver.trigger_solution_computation.emit(self.solver_batch_dir)
-            self.solver.trigger_solution_computation.emit(
-                os.path.join(
-                    "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/SOLVER_PHOTOS",
-                    "30",
-                    "0_photos"
-                )
-            )
+            self.solver.trigger_solution_computation.emit(solver_batch_working_dir)
+            
         self.compute_solution_button.clicked.connect(compute_solution)
+        
+        
+        @pyqtSlot()
+        def move_pieces_into_place():
+            # Disable the UI while we're working on the solution
+            self.move_pieces_into_place_button.setEnabled(False)
+            self.set_clearcore_availability(False)
+            self.set_gripper_availability(False)
+            
+            # Find the most recent batch directory
+            solver_dir = self.solver_directory_textbox.text()
+            last_batch_number = 0
+            sub_dirs = [d for d in os.listdir(solver_dir) if os.path.isdir(os.path.join(solver_dir, d))]
+            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+            batch_dirs.sort(key=int) # sorts in place
+            if batch_dirs:
+                last_batch_number = int(batch_dirs[-1])
+            solver_batch_working_dir = os.path.join(solver_dir, str(last_batch_number))
+            
+            # Compile all of the solution data into one easy to parse data structure (array of dicts)
+            solution_dir = os.path.join(solver_batch_working_dir, SOLUTION_DIR)
+            files = glob("*.json", root_dir=solution_dir)
+            solution = []
+            for piece_info_filename in files:
+                piece_number = os.path.splitext(piece_info_filename)[0]
+                with open(os.path.join(solution_dir, piece_info_filename), "r") as jsonfile:
+                    piece_info = json.load(jsonfile)
+                    solution.append(piece_info)
+            
+            # First find the top left corner piece
+            # top_left_corner = {"dest_photo_space_incenter": [3000,3000]}
+            # max_dist_from_origin = math.sqrt(3000**2 + 3000*2)
+            # for piece in solution:
+            #     dest_x, dest_y = piece["dest_photo_space_incenter"]
+            #     dist_from_origin = math.sqrt(dest_x**2 + dest_y**2)
+            #     if (dist_from_origin < max_dist_from_origin):
+            #         top_left_corner = piece
+            #         max_dist_from_origin = dist_from_origin
+            # first_piece = top_left_corner
+            
+            # Find the top left corner and move it into place
+            # This will work once Ryan fixes his code
+            first_piece = [d for d in solution if d["solution_x"] == 1 and d["solution_y"] == 0][0]
+            
+            # Find the pickup point w.r.t the photo origin, in pixels
+            photo_space_incenter_x, photo_space_incenter_y = first_piece["photo_space_incenter"]
+            
+            # Transform the pickup point pixels x,y into motor counts x,y
+            motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+            motor_counts_incenter_y = photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+            
+            # Add in the motor offset of the photo and the motor offset of the gripper to find the absolute 
+            # location of the pickup point in robot coordinates.
+            pickup_motor_counts_x = int(
+                first_piece["robot_state"]["photo_at_motor_position"][0] + 
+                -motor_counts_incenter_x + 
+                float(self.camera_to_gripper_x_transform_textbox.text())
+            )
+            pickup_motor_counts_y = int(
+                first_piece["robot_state"]["photo_at_motor_position"][1] + 
+                -motor_counts_incenter_y + 
+                float(self.camera_to_gripper_y_transform_textbox.text())
+            )
+            
+            # Determine the destination angle
+            destination_angle_radians = first_piece["dest_rotation"]
+            destination_angle_degrees = destination_angle_radians * (180/math.pi)
+            
+            # Convert the angle from degrees to rotational motor counts
+            destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
+            
+            # Motor only accepts positive motor counts, so if angle is negative, 
+            # convert it to the corresponding positive angle.
+            if (destination_angle_motor_counts < 0):
+                destination_angle_motor_counts = 65536 + destination_angle_motor_counts            
+            
+            # Find the destination point w.r.t the top left origin, in pixel space
+            dest_photo_space_incenter_x, dest_photo_space_incenter_y = first_piece["dest_photo_space_incenter"]
+            
+            print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
+            print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+            
+            
+            # Transform the destination point pixels x,y into motor counts x,y            
+            dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+            dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+            
+            print(f"dest_motor_counts_x: {dest_motor_counts_x}")
+            print(f"dest_motor_counts_y: {dest_motor_counts_y}")
+            
+            # Add in the desired motor origin of where we want the puzzle solution to go, and also add
+            # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
+            # in robot coordinates
+            solution_motor_origin = (80000, 285000)
+
+            print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
+            print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
+
+            dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
+            dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
+            
+            # Round all motor counts
+            destination_angle_motor_counts = round(destination_angle_motor_counts)
+            pickup_motor_counts_x = round(pickup_motor_counts_x)
+            pickup_motor_counts_y = round(pickup_motor_counts_y)
+            dest_motor_counts_x = round(dest_motor_counts_x)
+            dest_motor_counts_y = round(dest_motor_counts_y)
+            
+            # print it out for now
+            print(f"pickup x: {pickup_motor_counts_x}")
+            print(f"pickup y: {pickup_motor_counts_y}")
+            print(f"dest x: {dest_motor_counts_x}")
+            print(f"dest y: {dest_motor_counts_y}")
+            print(f"angle: {destination_angle_motor_counts}")
+            
+            # Re-enable the UI when we're finished working on the solution
+            self.move_pieces_into_place_button.setEnabled(True)
+            self.set_clearcore_availability(True)
+            self.set_gripper_availability(True)
+            
+        self.move_pieces_into_place_button.clicked.connect(move_pieces_into_place)
+        
+
+        
+
+    def read_solver_config(self):
+        """Update solver tab input boxes from JSON-formatted config file"""
+        with open(self.config_file_path, "r") as jsonfile:
+            self.config = json.load(jsonfile)
+            self.solver_directory_textbox.setText(self.config.get('solver_directory', ''))
+            
+    def write_solver_config(self):
+        """Update self.config from solver tab input boxes and write it to a JSON-formatted config file"""
+        # Update self.config from input boxes
+        self.config['solver_directory'] = self.solver_directory_textbox.text()
+        
+        # Write self.config to a JSON-formatted config file
+        with open(self.config_file_path, "w") as jsonfile:
+            json.dump(self.config, jsonfile)
 
 
 def sigint_handler(*args):
