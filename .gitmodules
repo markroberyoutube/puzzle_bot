@@ -1,0 +1,3 @@
+[submodule "solver_library"]
+	path = solver_library
+	url = git@github.com:iancharnas/ryan-puzzle-solver.git
