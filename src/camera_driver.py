@@ -42,10 +42,10 @@ class GalaxyS24(QThread):
         # Ask the main run loop to exit
         self._thread_exiting = True
 
-    def adb(self, command, delay_ms_after=0, log_error=True):
+    def adb(self, command, delay_ms_after=0, log_error=True, cwd=None):
         """Issue an adb command and return a (retcode, stdout) tuple"""
         logging.debug(f"[GalaxyS24.adb] running command: {command}")
-        results = subprocess.run(command, capture_output=True, shell=True)
+        results = subprocess.run(command, capture_output=True, shell=True, cwd=cwd)
         if results.returncode != 0:
             if log_error:
                 logging.error(f"[GalaxyS24.adb] Error running {command}: {results.stderr}\n{results.stdout}")
@@ -108,17 +108,17 @@ class GalaxyS24(QThread):
 
         # Take the photo (Tap the shutter button) and wait 2 seconds for the camera to take the photo
         logging.debug("[GalaxyS24.capture_photo] Taking photo...")
-        if not self.adb("adb shell input tap 534 2006", 2000)[0]: return
+        if not self.adb("adb shell input tap 534 2006", 5000)[0]: return # ICC changed 2000 to 5000 for debugging
 
         # Find the most recently taken photo
-        retcode, stdout = self.adb("adb shell ls -clr /sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
+        retcode, stdout = self.adb("adb shell ls -clr sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
         if not retcode: return
-        remote_photo_path = stdout.decode('ascii').strip()
+        remote_photo_path = stdout.decode('ascii').strip().strip("'")
         remote_file_name = posixpath.split(remote_photo_path)[-1]
 
         # Download that photo
         local_photo_path = posixpath.join(batch_dir, remote_file_name)
-        retcode, stdout = self.adb(f"adb pull -a '{remote_photo_path}' '{local_photo_path}'", 0)
+        retcode, stdout = self.adb(f"adb pull -a {remote_photo_path}", 0, cwd=batch_dir)
         if not retcode: return
             
         # Let other threads know a new photo has been captured
