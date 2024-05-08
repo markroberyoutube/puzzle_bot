@@ -1,3 +1,0 @@
-[submodule "solver_library"]
-	path = solver_library
-	url = https://github.com/roksenhorn/puzzle-bot.git
