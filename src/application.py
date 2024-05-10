@@ -32,6 +32,10 @@ from common.config import *
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
+SAFE_TRAVEL_Z = 30000
+DROPOFF_Z = 3000
+PICKUP_Z = 0
+
 INPUT_IMAGE_WIDTH = 4000
 
 APPLICATION_NAME = "Puzzlin' Pete"
@@ -1411,7 +1415,7 @@ class Ui(QMainWindow):
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
             json.dump(self.config, jsonfile)
-            
+
             
     ################################################################################################
     ################################################################################################
@@ -1419,15 +1423,15 @@ class Ui(QMainWindow):
     ################################################################################################
     ################################################################################################
     def setup_perform_moves_tab(self):
-        # Configure output textareas to always scroll to the bottom when they are being added to
-        list_moves_scrollbar = self.list_moves_textarea.verticalScrollBar()
-        list_moves_scrollbar.rangeChanged.connect(
-            lambda minVal, maxVal: list_moves_scrollbar.setValue(list_moves_scrollbar.maximum())
-        )
-        perform_moves_scrollbar = self.perform_moves_textarea.verticalScrollBar()
-        perform_moves_scrollbar.rangeChanged.connect(
-            lambda minVal, maxVal: perform_moves_scrollbar.setValue(perform_moves_scrollbar.maximum())
-        )
+        # # Configure output textareas to always scroll to the bottom when they are being added to
+        # list_moves_scrollbar = self.list_moves_textarea.verticalScrollBar()
+        # list_moves_scrollbar.rangeChanged.connect(
+        #     lambda minVal, maxVal: list_moves_scrollbar.setValue(list_moves_scrollbar.maximum())
+        # )
+        # perform_moves_scrollbar = self.perform_moves_textarea.verticalScrollBar()
+        # perform_moves_scrollbar.rangeChanged.connect(
+        #     lambda minVal, maxVal: perform_moves_scrollbar.setValue(perform_moves_scrollbar.maximum())
+        # )
         
         # Connect buttons
         self.list_moves_button.clicked.connect(self.list_moves)
@@ -1463,6 +1467,7 @@ class Ui(QMainWindow):
             with open(posixpath.join(solution_dir, piece_info_filename), "r") as jsonfile:
                 piece_info = json.load(jsonfile)
                 solution.append(piece_info)
+            QApplication.processEvents()
         
         # For each piece, compute a text representation of a "move" which looks like this:
         # 111,222 => 333,444,555
@@ -1480,7 +1485,6 @@ class Ui(QMainWindow):
             if piece["solution_y"] > max_y:
                 max_y = piece["solution_y"]
         
-
         # Sort the pieces in anchor order
         all_pieces = np.ndindex((max_x + 1, max_y + 1))
         pieces_in_anchor_order = anchor_order(all_pieces)
@@ -1517,17 +1521,16 @@ class Ui(QMainWindow):
             destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
         
             # Motor only accepts positive motor counts, so if angle is negative, 
-            # convert it to the corresponding positive angle.
+            # convert it to the corresponding positive angle. We sometimes need to do this twice,
+            # in the event the solver algorithm wants us to rotate more than 360
             while (destination_angle_motor_counts < 0):
                 destination_angle_motor_counts = MAX_ROTATION_MOTOR_COUNTS + destination_angle_motor_counts
-            
-            
-        
+
             # Find the destination point w.r.t the top left origin, in pixel space
             dest_photo_space_incenter_x, dest_photo_space_incenter_y = piece["dest_photo_space_incenter"]
         
-            print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
-            print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+            logging.debug(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
+            logging.debug(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
 
             # Scale that destination point vis-a-vis the scale factor used during image processing
             dest_photo_space_incenter_x = dest_photo_space_incenter_x / scale_factor
@@ -1541,12 +1544,12 @@ class Ui(QMainWindow):
             dest_motor_counts_x = -dest_motor_counts_x
             dest_motor_counts_y = -dest_motor_counts_y
         
-            print(f"dest_motor_counts_x: {dest_motor_counts_x}")
-            print(f"dest_motor_counts_y: {dest_motor_counts_y}")
+            logging.debug(f"dest_motor_counts_x: {dest_motor_counts_x}")
+            logging.debug(f"dest_motor_counts_y: {dest_motor_counts_y}")
         
             # Add in the desired motor origin of where we want the puzzle solution to go, to find the absolute 
             # location of the destination drop-off point in robot coordinates
-            solution_motor_origin = (80000, 285000)
+            solution_motor_origin = (80000, 295000)
 
             dest_motor_counts_x += solution_motor_origin[0]
             dest_motor_counts_y += solution_motor_origin[1]
@@ -1558,16 +1561,17 @@ class Ui(QMainWindow):
             dest_motor_counts_x = round(dest_motor_counts_x)
             dest_motor_counts_y = round(dest_motor_counts_y)
 
-            # # print it out
-            print(f"pickup x: {pickup_motor_counts_x}")
-            print(f"pickup y: {pickup_motor_counts_y}")
-            print(f"dest x: {dest_motor_counts_x}")
-            print(f"dest y: {dest_motor_counts_y}")
-            print(f"angle: {destination_angle_motor_counts}")
+            # Print it out
+            logging.debug(f"pickup x: {pickup_motor_counts_x}")
+            logging.debug(f"pickup y: {pickup_motor_counts_y}")
+            logging.debug(f"dest x: {dest_motor_counts_x}")
+            logging.debug(f"dest y: {dest_motor_counts_y}")
+            logging.debug(f"angle: {destination_angle_motor_counts}")
             
             # Add this move to the output textarea
             move = f"{pickup_motor_counts_x},{pickup_motor_counts_y} => {dest_motor_counts_x},{dest_motor_counts_y},{destination_angle_motor_counts}"
             self.list_moves_textarea.insertHtml(f"{move}<br />")
+            QApplication.processEvents()
         
         # Re-enable the UI when we're finished
         self.list_moves_button.setEnabled(True)
@@ -1577,8 +1581,81 @@ class Ui(QMainWindow):
         
     @pyqtSlot()
     def move_pieces_into_place(self):
-        pass
+        moves = self.perform_moves_textarea.toPlainText()
+        for move in moves.splitlines():
+            # Parse each of the moves
+            src, dest = move.split("=>")
+            src_x, src_y = src.strip().split(",")
+            dst_x, dst_y, dst_angle = dest.strip().split(",")
 
+            # Make sure the vacuum is OFF
+            logging.debug("\n\nPICKING UP NEXT PIECE")
+            logging.debug("TURNING OFF VACUUM")
+            self.send_clearcore_command("0", blocking=True, update_position=True)
+            QApplication.processEvents()
+
+            # Get current position
+            x = parse_int(self.move_x_textbox.text())
+            y = parse_int(self.move_y_textbox.text())
+            z = parse_int(self.move_z_textbox.text())
+
+            # Move to a safe travel Z
+            logging.debug("MOVING TO SAFE TRAVEL Z")
+            self.send_clearcore_command(f"m {x},{y},{SAFE_TRAVEL_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Rotate back to 0
+            logging.debug("ROTATING TO 0")
+            self.send_gripper_command(f"r 0", blocking=True)
+            QApplication.processEvents()
+
+            # Move to the pickup position
+            logging.debug("MOVING TO PICKUP POSITION")
+            self.send_clearcore_command(f"m {src_x},{src_y},{SAFE_TRAVEL_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Move DOWN to pick up the piece
+            logging.debug("MOVING DOWN TO PICKUP_Z")
+            self.send_clearcore_command(f"m {src_x},{src_y},{PICKUP_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Turn vacuum on
+            logging.debug("TURNING VACUUM ON")
+            self.send_clearcore_command("1", blocking=True, update_position=False)
+            QApplication.processEvents()
+
+            # Wait 1 second for vacuum to develop
+            QtTest.QTest.qWait(1000)
+
+            # Move UP to the safe travel Z
+            logging.debug("MOVING UP TO TRAVEL_Z")
+            self.send_clearcore_command(f"m {src_x},{src_y},{SAFE_TRAVEL_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Move to the destination position
+            logging.debug("MOVING TO DESTINATION POSITION")
+            self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Rotate to destination angle
+            logging.debug("ROTATING TO FINAL ANGLE")
+            self.send_gripper_command(f"r {dst_angle}", blocking=True)
+            QApplication.processEvents()
+
+            # Move DOWN to drop off position
+            logging.debug("MOVING DOWN TO DROP OFF POSITION")
+            self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
+            QApplication.processEvents()
+
+            # Turn vacuum off
+            logging.debug("TURNING OFF VACUUM")
+            self.send_clearcore_command("0", blocking=True, update_position=False)
+            QApplication.processEvents()
+
+            # Move to a safe travel Z
+            logging.debug("MOVING TO A SAFE TRAVEL Z")
+            self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
+            QApplication.processEvents()
 
 def sigint_handler(*args):
     """Handler for the SIGINT signal."""
