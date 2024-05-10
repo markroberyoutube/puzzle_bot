@@ -1426,11 +1426,11 @@ class Ui(QMainWindow):
         )
         
         # Connect buttons
-        self.list_moves_button.clicked.connect()
-        self.
+        self.list_moves_button.clicked.connect(self.list_moves)
+        self.perform_moves_button.clicked.connect(self.move_pieces_into_place)
 
     @pyqtSlot()
-    def list_moves():
+    def list_moves(self):
         # Disable the UI while we're working on this
         self.list_moves_button.setEnabled(False)
         self.perform_moves_button.setEnabled(False)
@@ -1471,7 +1471,7 @@ class Ui(QMainWindow):
             if piece["solution_x"] > max_x:
                 max_x = piece["solution_x"]
             if piece["solution_y"] > max_y:
-                max_x = piece["solution_y"]
+                max_y = piece["solution_y"]
         
         print(f"max_x: {max_x}")
         print(f"max_y: {max_y}")
@@ -1557,11 +1557,9 @@ class Ui(QMainWindow):
         self.set_clearcore_availability(True)
         self.set_gripper_availability(True)
         
-    
     @pyqtSlot()
-    def move_pieces_into_place():
-        
-    self.perform_moves_button.clicked.connect(move_pieces_into_place)
+    def move_pieces_into_place(self):
+        pass
 
 
 def sigint_handler(*args):
