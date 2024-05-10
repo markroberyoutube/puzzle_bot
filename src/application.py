@@ -4,6 +4,7 @@ import sys, os, threading, time, signal, shutil, posixpath
 import exif, json, math, argparse, tempfile
 from glob import glob
 import cv2 as cv
+import numpy as np
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QTimer, QThread, Qt
