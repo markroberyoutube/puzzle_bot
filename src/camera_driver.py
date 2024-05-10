@@ -108,7 +108,7 @@ class GalaxyS24(QThread):
 
         # Take the photo (Tap the shutter button) and wait 2 seconds for the camera to take the photo
         logging.debug("[GalaxyS24.capture_photo] Taking photo...")
-        if not self.adb("adb shell input tap 534 2006", 5000)[0]: return # ICC changed 2000 to 5000 for debugging
+        if not self.adb("adb shell input tap 534 2006", 4000)[0]: return # ICC changed 2000 to 4000 for debugging
 
         # Find the most recently taken photo
         retcode, stdout = self.adb("adb shell ls -clr sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
