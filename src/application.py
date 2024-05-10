@@ -1528,26 +1528,26 @@ class Ui(QMainWindow):
             # Find the destination point w.r.t the top left origin, in pixel space
             dest_photo_space_incenter_x, dest_photo_space_incenter_y = piece["dest_photo_space_incenter"]
         
-            # print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
-            # print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+            print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
+            print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
         
             # Transform the destination point pixels x,y into motor counts x,y            
             dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
             dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+
+            # Reverse their orientation due to the way in which motor_counts_per_px are calculated
+            dest_motor_counts_x = -dest_motor_counts_x
+            dest_motor_counts_y = -dest_motor_counts_y
         
-            # print(f"dest_motor_counts_x: {dest_motor_counts_x}")
-            # print(f"dest_motor_counts_y: {dest_motor_counts_y}")
+            print(f"dest_motor_counts_x: {dest_motor_counts_x}")
+            print(f"dest_motor_counts_y: {dest_motor_counts_y}")
         
-            # Add in the desired motor origin of where we want the puzzle solution to go, and also add
-            # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
-            # in robot coordinates
+            # Add in the desired motor origin of where we want the puzzle solution to go, to find the absolute 
+            # location of the destination drop-off point in robot coordinates
             solution_motor_origin = (80000, 285000)
 
-            # print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
-            # print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
-
-            dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
-            dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
+            dest_motor_counts_x += solution_motor_origin[0]
+            dest_motor_counts_y += solution_motor_origin[1]
         
             # Round all motor counts
             destination_angle_motor_counts = round(destination_angle_motor_counts)
@@ -1557,11 +1557,11 @@ class Ui(QMainWindow):
             dest_motor_counts_y = round(dest_motor_counts_y)
 
             # # print it out
-            # print(f"pickup x: {pickup_motor_counts_x}")
-            # print(f"pickup y: {pickup_motor_counts_y}")
-            # print(f"dest x: {dest_motor_counts_x}")
-            # print(f"dest y: {dest_motor_counts_y}")
-            # print(f"angle: {destination_angle_motor_counts}")
+            print(f"pickup x: {pickup_motor_counts_x}")
+            print(f"pickup y: {pickup_motor_counts_y}")
+            print(f"dest x: {dest_motor_counts_x}")
+            print(f"dest y: {dest_motor_counts_y}")
+            print(f"angle: {destination_angle_motor_counts}")
             
             # Add this move to the output textarea
             move = f"{pickup_motor_counts_x},{pickup_motor_counts_y} => {dest_motor_counts_x},{dest_motor_counts_y},{destination_angle_motor_counts}"
