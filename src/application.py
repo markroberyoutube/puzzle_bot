@@ -1491,10 +1491,6 @@ class Ui(QMainWindow):
 
             # Find the pickup point w.r.t the photo origin, in pixels
             photo_space_incenter_x, photo_space_incenter_y = piece["photo_space_incenter"]
-            
-            # Scale the pickup point values vis-a-vis the scale factor used to shrink the images for processing
-            photo_space_incenter_x = photo_space_incenter_x / scale_factor
-            photo_space_incenter_y = photo_space_incenter_x / scale_factor
         
             # Transform the pickup point pixels x,y into motor counts x,y
             motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
@@ -1522,14 +1518,20 @@ class Ui(QMainWindow):
         
             # Motor only accepts positive motor counts, so if angle is negative, 
             # convert it to the corresponding positive angle.
-            if (destination_angle_motor_counts < 0):
-                destination_angle_motor_counts = MAX_ROTATION_MOTOR_COUNTS + destination_angle_motor_counts            
+            while (destination_angle_motor_counts < 0):
+                destination_angle_motor_counts = MAX_ROTATION_MOTOR_COUNTS + destination_angle_motor_counts
+            
+            
         
             # Find the destination point w.r.t the top left origin, in pixel space
             dest_photo_space_incenter_x, dest_photo_space_incenter_y = piece["dest_photo_space_incenter"]
         
             print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
             print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+
+            # Scale that destination point vis-a-vis the scale factor used during image processing
+            dest_photo_space_incenter_x = dest_photo_space_incenter_x / scale_factor
+            dest_photo_space_incenter_y = dest_photo_space_incenter_y / scale_factor
         
             # Transform the destination point pixels x,y into motor counts x,y            
             dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
