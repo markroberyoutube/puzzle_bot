@@ -76,7 +76,8 @@ class Ui(QMainWindow):
         self.setup_serpentine_photos_tab()
         self.setup_camera_calibration_tab()
         self.setup_gripper_calibration_tab()
-        self.setup_solve_puzzle_tab()
+        self.setup_compute_solution_tab()
+        self.setup_perform_moves_tab()
     
     def closeEvent(self, event):
         logging.debug(f"[Ui.closeEvent] closing main window")
@@ -1330,8 +1331,8 @@ class Ui(QMainWindow):
     # "SOLVE PUZZLE" TAB
     ################################################################################################
     ################################################################################################
-    def setup_solve_puzzle_tab(self):
-        """Configure UI on the SOLVE PUZZLE tab"""
+    def setup_compute_solution_tab(self):
+        """Configure UI on the COMPUTE SOLUTION tab"""
         
         # Start up a thread for the gripper calibration functionality
         self.solver = PuzzleSolver(parent=self)
@@ -1391,130 +1392,6 @@ class Ui(QMainWindow):
             self.solver.trigger_solution_computation.emit(solver_batch_working_dir)
             
         self.compute_solution_button.clicked.connect(compute_solution)
-        
-        
-        @pyqtSlot()
-        def move_pieces_into_place():
-            # Disable the UI while we're working on the solution
-            self.move_pieces_into_place_button.setEnabled(False)
-            self.set_clearcore_availability(False)
-            self.set_gripper_availability(False)
-            
-            # Find the most recent batch directory
-            solver_dir = self.solver_directory_textbox.text()
-            last_batch_number = 0
-            sub_dirs = [d for d in os.listdir(solver_dir) if posixpath.isdir(posixpath.join(solver_dir, d))]
-            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
-            batch_dirs.sort(key=int) # sorts in place
-            if batch_dirs:
-                last_batch_number = int(batch_dirs[-1])
-            solver_batch_working_dir = posixpath.join(solver_dir, str(last_batch_number))
-            
-            # Compile all of the solution data into one easy to parse data structure (array of dicts)
-            solution_dir = posixpath.join(solver_batch_working_dir, SOLUTION_DIR)
-            files = glob("*.json", root_dir=solution_dir)
-            solution = []
-            for piece_info_filename in files:
-                piece_number = posixpath.splitext(piece_info_filename)[0]
-                with open(posixpath.join(solution_dir, piece_info_filename), "r") as jsonfile:
-                    piece_info = json.load(jsonfile)
-                    solution.append(piece_info)
-            
-            # First find the top left corner piece
-            # top_left_corner = {"dest_photo_space_incenter": [3000,3000]}
-            # max_dist_from_origin = math.sqrt(3000**2 + 3000*2)
-            # for piece in solution:
-            #     dest_x, dest_y = piece["dest_photo_space_incenter"]
-            #     dist_from_origin = math.sqrt(dest_x**2 + dest_y**2)
-            #     if (dist_from_origin < max_dist_from_origin):
-            #         top_left_corner = piece
-            #         max_dist_from_origin = dist_from_origin
-            # first_piece = top_left_corner
-            
-            # Find the top left corner and move it into place
-            # This will work once Ryan fixes his code
-            first_piece = [d for d in solution if d["solution_x"] == 1 and d["solution_y"] == 0][0]
-            
-            # Find the pickup point w.r.t the photo origin, in pixels
-            photo_space_incenter_x, photo_space_incenter_y = first_piece["photo_space_incenter"]
-            
-            # Transform the pickup point pixels x,y into motor counts x,y
-            motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
-            motor_counts_incenter_y = photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
-            
-            # Add in the motor offset of the photo and the motor offset of the gripper to find the absolute 
-            # location of the pickup point in robot coordinates.
-            pickup_motor_counts_x = int(
-                first_piece["robot_state"]["photo_at_motor_position"][0] + 
-                -motor_counts_incenter_x + 
-                float(self.camera_to_gripper_x_transform_textbox.text())
-            )
-            pickup_motor_counts_y = int(
-                first_piece["robot_state"]["photo_at_motor_position"][1] + 
-                -motor_counts_incenter_y + 
-                float(self.camera_to_gripper_y_transform_textbox.text())
-            )
-            
-            # Determine the destination angle
-            destination_angle_radians = first_piece["dest_rotation"]
-            destination_angle_degrees = destination_angle_radians * (180/math.pi)
-            
-            # Convert the angle from degrees to rotational motor counts
-            destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
-            
-            # Motor only accepts positive motor counts, so if angle is negative, 
-            # convert it to the corresponding positive angle.
-            if (destination_angle_motor_counts < 0):
-                destination_angle_motor_counts = 65536 + destination_angle_motor_counts            
-            
-            # Find the destination point w.r.t the top left origin, in pixel space
-            dest_photo_space_incenter_x, dest_photo_space_incenter_y = first_piece["dest_photo_space_incenter"]
-            
-            print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
-            print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
-            
-            
-            # Transform the destination point pixels x,y into motor counts x,y            
-            dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
-            dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
-            
-            print(f"dest_motor_counts_x: {dest_motor_counts_x}")
-            print(f"dest_motor_counts_y: {dest_motor_counts_y}")
-            
-            # Add in the desired motor origin of where we want the puzzle solution to go, and also add
-            # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
-            # in robot coordinates
-            solution_motor_origin = (80000, 285000)
-
-            print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
-            print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
-
-            dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
-            dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
-            
-            # Round all motor counts
-            destination_angle_motor_counts = round(destination_angle_motor_counts)
-            pickup_motor_counts_x = round(pickup_motor_counts_x)
-            pickup_motor_counts_y = round(pickup_motor_counts_y)
-            dest_motor_counts_x = round(dest_motor_counts_x)
-            dest_motor_counts_y = round(dest_motor_counts_y)
-            
-            # print it out for now
-            print(f"pickup x: {pickup_motor_counts_x}")
-            print(f"pickup y: {pickup_motor_counts_y}")
-            print(f"dest x: {dest_motor_counts_x}")
-            print(f"dest y: {dest_motor_counts_y}")
-            print(f"angle: {destination_angle_motor_counts}")
-            
-            # Re-enable the UI when we're finished working on the solution
-            self.move_pieces_into_place_button.setEnabled(True)
-            self.set_clearcore_availability(True)
-            self.set_gripper_availability(True)
-            
-        self.move_pieces_into_place_button.clicked.connect(move_pieces_into_place)
-        
-
-        
 
     def read_solver_config(self):
         """Update solver tab input boxes from JSON-formatted config file"""
@@ -1530,6 +1407,161 @@ class Ui(QMainWindow):
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
             json.dump(self.config, jsonfile)
+            
+            
+    ################################################################################################
+    ################################################################################################
+    # "SOLVE PUZZLE" TAB
+    ################################################################################################
+    ################################################################################################
+    def setup_perform_moves_tab(self):
+        # Configure output textareas to always scroll to the bottom when they are being added to
+        list_moves_scrollbar = self.list_moves_textarea.verticalScrollBar()
+        list_moves_scrollbar.rangeChanged.connect(
+            lambda minVal, maxVal: list_moves_scrollbar.setValue(list_moves_scrollbar.maximum())
+        )
+        perform_moves_scrollbar = self.perform_moves_textarea.verticalScrollBar()
+        perform_moves_scrollbar.rangeChanged.connect(
+            lambda minVal, maxVal: perform_moves_scrollbar.setValue(perform_moves_scrollbar.maximum())
+        )
+        
+        # Connect buttons
+        self.list_moves_button.clicked.connect()
+        self.
+
+    @pyqtSlot()
+    def list_moves():
+        # Disable the UI while we're working on this
+        self.list_moves_button.setEnabled(False)
+        self.perform_moves_button.setEnabled(False)
+        self.set_clearcore_availability(False)
+        self.set_gripper_availability(False)
+        
+        # Find the most recent batch directory
+        solver_dir = self.solver_directory_textbox.text()
+        last_batch_number = 0
+        sub_dirs = [d for d in os.listdir(solver_dir) if posixpath.isdir(posixpath.join(solver_dir, d))]
+        batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+        batch_dirs.sort(key=int) # sorts in place
+        if batch_dirs:
+            last_batch_number = int(batch_dirs[-1])
+        solver_batch_working_dir = posixpath.join(solver_dir, str(last_batch_number))
+        
+        # Compile all of the solution data into one easy to parse data structure (array of dicts)
+        solution_dir = posixpath.join(solver_batch_working_dir, SOLUTION_DIR)
+        files = glob("*.json", root_dir=solution_dir)
+        solution = []
+        for piece_info_filename in files:
+            piece_number = posixpath.splitext(piece_info_filename)[0]
+            with open(posixpath.join(solution_dir, piece_info_filename), "r") as jsonfile:
+                piece_info = json.load(jsonfile)
+                solution.append(piece_info)
+        
+        # For each piece, compute a text representation of a "move" which looks like this:
+        # 111,222 => 333,444,555
+        # pickup_x, pickup_y => drop_x, drop_y, angle
+        # all values are in absolute motor counts
+        # Store all of those "moves" into the output text area
+        # The moves should be listed with the top left corner piece first, and then scanning 
+        # on a lower-left to upper-right diagonal so that a triangle is formed which we are
+        # hoping will help anchor the pieces
+        max_x = 0
+        max_y = 0
+        for piece in solution:
+            if piece["solution_x"] > max_x:
+                max_x = piece["solution_x"]
+            if piece["solution_y"] > max_y:
+                max_x = piece["solution_y"]
+        
+        print(f"max_x: {max_x}")
+        print(f"max_y: {max_y}")
+        return
+        
+        # Find the top left corner and move it into place
+        # This will work once Ryan fixes his code
+        first_piece = [d for d in solution if d["solution_x"] == 1 and d["solution_y"] == 0][0]
+        
+        # Find the pickup point w.r.t the photo origin, in pixels
+        photo_space_incenter_x, photo_space_incenter_y = first_piece["photo_space_incenter"]
+        
+        # Transform the pickup point pixels x,y into motor counts x,y
+        motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+        motor_counts_incenter_y = photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+        
+        # Add in the motor offset of the photo and the motor offset of the gripper to find the absolute 
+        # location of the pickup point in robot coordinates.
+        pickup_motor_counts_x = int(
+            first_piece["robot_state"]["photo_at_motor_position"][0] + 
+            -motor_counts_incenter_x + 
+            float(self.camera_to_gripper_x_transform_textbox.text())
+        )
+        pickup_motor_counts_y = int(
+            first_piece["robot_state"]["photo_at_motor_position"][1] + 
+            -motor_counts_incenter_y + 
+            float(self.camera_to_gripper_y_transform_textbox.text())
+        )
+        
+        # Determine the destination angle
+        destination_angle_radians = first_piece["dest_rotation"]
+        destination_angle_degrees = destination_angle_radians * (180/math.pi)
+        
+        # Convert the angle from degrees to rotational motor counts
+        destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
+        
+        # Motor only accepts positive motor counts, so if angle is negative, 
+        # convert it to the corresponding positive angle.
+        if (destination_angle_motor_counts < 0):
+            destination_angle_motor_counts = 65536 + destination_angle_motor_counts            
+        
+        # Find the destination point w.r.t the top left origin, in pixel space
+        dest_photo_space_incenter_x, dest_photo_space_incenter_y = first_piece["dest_photo_space_incenter"]
+        
+        print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
+        print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+        
+        
+        # Transform the destination point pixels x,y into motor counts x,y            
+        dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+        dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+        
+        print(f"dest_motor_counts_x: {dest_motor_counts_x}")
+        print(f"dest_motor_counts_y: {dest_motor_counts_y}")
+        
+        # Add in the desired motor origin of where we want the puzzle solution to go, and also add
+        # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
+        # in robot coordinates
+        solution_motor_origin = (80000, 285000)
+
+        print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
+        print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
+
+        dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
+        dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
+        
+        # Round all motor counts
+        destination_angle_motor_counts = round(destination_angle_motor_counts)
+        pickup_motor_counts_x = round(pickup_motor_counts_x)
+        pickup_motor_counts_y = round(pickup_motor_counts_y)
+        dest_motor_counts_x = round(dest_motor_counts_x)
+        dest_motor_counts_y = round(dest_motor_counts_y)
+        
+        # print it out for now
+        print(f"pickup x: {pickup_motor_counts_x}")
+        print(f"pickup y: {pickup_motor_counts_y}")
+        print(f"dest x: {dest_motor_counts_x}")
+        print(f"dest y: {dest_motor_counts_y}")
+        print(f"angle: {destination_angle_motor_counts}")
+        
+        # Re-enable the UI when we're finished working on the solution
+        self.move_pieces_into_place_button.setEnabled(True)
+        self.set_clearcore_availability(True)
+        self.set_gripper_availability(True)
+        
+    
+    @pyqtSlot()
+    def move_pieces_into_place():
+        
+    self.perform_moves_button.clicked.connect(move_pieces_into_place)
 
 
 def sigint_handler(*args):
