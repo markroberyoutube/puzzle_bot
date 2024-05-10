@@ -32,6 +32,8 @@ from common.config import *
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
+INPUT_IMAGE_WIDTH = 4000
+
 APPLICATION_NAME = "Puzzlin' Pete"
 
 # QT Class inheritance code from
@@ -1439,6 +1441,9 @@ class Ui(QMainWindow):
         self.set_clearcore_availability(False)
         self.set_gripper_availability(False)
         
+        # Determine scale factor that was used to shrink the images. Will be used to scale the solution
+        scale_factor = BMP_WIDTH / INPUT_IMAGE_WIDTH
+        
         # Find the most recent batch directory
         solver_dir = self.solver_directory_textbox.text()
         last_batch_number = 0
@@ -1486,6 +1491,10 @@ class Ui(QMainWindow):
 
             # Find the pickup point w.r.t the photo origin, in pixels
             photo_space_incenter_x, photo_space_incenter_y = piece["photo_space_incenter"]
+            
+            # Scale the pickup point values vis-a-vis the scale factor used to shrink the images for processing
+            photo_space_incenter_x = photo_space_incenter_x / scale_factor
+            photo_space_incenter_y = photo_space_incenter_x / scale_factor
         
             # Transform the pickup point pixels x,y into motor counts x,y
             motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
