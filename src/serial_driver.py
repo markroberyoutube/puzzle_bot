@@ -104,6 +104,9 @@ class SerialBase(QThread):
                 loop = QEventLoop()
                 QTimer.singleShot(2000, loop.quit)
                 loop.exec_()
+                # Flush the serial input and output buffers
+                self._port.reset_input_buffer()
+                self._port.reset_output_buffer()
                 # Let the app know the serial port is now opened
                 logging.debug(f"[SerialBase.run] Successfully connected to {self.name} port")
                 self.port_opened.emit(True) # Let other threads know port opened successfully
