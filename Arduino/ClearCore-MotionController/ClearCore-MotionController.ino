@@ -218,7 +218,7 @@ void setup() {
   }
 
   // Set up the soft e-stop on all motors
-  motors.EStopConnector(softStopPin);
+  motorX.EStopConnector(softStopPin);
   motorY1.EStopConnector(softStopPin);
   motorY2.EStopConnector(softStopPin);
   motorZ.EStopConnector(softStopPin);
