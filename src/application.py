@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-from utils import parse_int, open_image_undistorted_and_rotated
+from utils import parse_int, open_image_undistorted_and_rotated, anchor_order
 from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
@@ -29,6 +29,7 @@ import process, solve
 from common import util
 from common.config import *
 
+MAX_ROTATION_MOTOR_COUNTS = 65536
 
 APPLICATION_NAME = "Puzzlin' Pete"
 
@@ -1473,87 +1474,92 @@ class Ui(QMainWindow):
             if piece["solution_y"] > max_y:
                 max_y = piece["solution_y"]
         
-        print(f"max_x: {max_x}")
-        print(f"max_y: {max_y}")
-        return
-        
-        # Find the top left corner and move it into place
-        # This will work once Ryan fixes his code
-        first_piece = [d for d in solution if d["solution_x"] == 1 and d["solution_y"] == 0][0]
-        
-        # Find the pickup point w.r.t the photo origin, in pixels
-        photo_space_incenter_x, photo_space_incenter_y = first_piece["photo_space_incenter"]
-        
-        # Transform the pickup point pixels x,y into motor counts x,y
-        motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
-        motor_counts_incenter_y = photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
-        
-        # Add in the motor offset of the photo and the motor offset of the gripper to find the absolute 
-        # location of the pickup point in robot coordinates.
-        pickup_motor_counts_x = int(
-            first_piece["robot_state"]["photo_at_motor_position"][0] + 
-            -motor_counts_incenter_x + 
-            float(self.camera_to_gripper_x_transform_textbox.text())
-        )
-        pickup_motor_counts_y = int(
-            first_piece["robot_state"]["photo_at_motor_position"][1] + 
-            -motor_counts_incenter_y + 
-            float(self.camera_to_gripper_y_transform_textbox.text())
-        )
-        
-        # Determine the destination angle
-        destination_angle_radians = first_piece["dest_rotation"]
-        destination_angle_degrees = destination_angle_radians * (180/math.pi)
-        
-        # Convert the angle from degrees to rotational motor counts
-        destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
-        
-        # Motor only accepts positive motor counts, so if angle is negative, 
-        # convert it to the corresponding positive angle.
-        if (destination_angle_motor_counts < 0):
-            destination_angle_motor_counts = 65536 + destination_angle_motor_counts            
-        
-        # Find the destination point w.r.t the top left origin, in pixel space
-        dest_photo_space_incenter_x, dest_photo_space_incenter_y = first_piece["dest_photo_space_incenter"]
-        
-        print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
-        print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
-        
-        
-        # Transform the destination point pixels x,y into motor counts x,y            
-        dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
-        dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
-        
-        print(f"dest_motor_counts_x: {dest_motor_counts_x}")
-        print(f"dest_motor_counts_y: {dest_motor_counts_y}")
-        
-        # Add in the desired motor origin of where we want the puzzle solution to go, and also add
-        # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
-        # in robot coordinates
-        solution_motor_origin = (80000, 285000)
 
-        print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
-        print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
+        # Sort the pieces in anchor order
+        all_pieces = np.ndindex((max_x + 1, max_y + 1))
+        pieces_in_anchor_order = anchor_order(all_pieces)
+        
+        # For each piece coordinate in order, find the desired move
+        for x,y in pieces_in_anchor_order:
+            piece = [p for p in solution if p["solution_x"] == x and p["solution_y"] == y][0]
 
-        dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
-        dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
+            # Find the pickup point w.r.t the photo origin, in pixels
+            photo_space_incenter_x, photo_space_incenter_y = piece["photo_space_incenter"]
         
-        # Round all motor counts
-        destination_angle_motor_counts = round(destination_angle_motor_counts)
-        pickup_motor_counts_x = round(pickup_motor_counts_x)
-        pickup_motor_counts_y = round(pickup_motor_counts_y)
-        dest_motor_counts_x = round(dest_motor_counts_x)
-        dest_motor_counts_y = round(dest_motor_counts_y)
+            # Transform the pickup point pixels x,y into motor counts x,y
+            motor_counts_incenter_x = photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+            motor_counts_incenter_y = photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
         
-        # print it out for now
-        print(f"pickup x: {pickup_motor_counts_x}")
-        print(f"pickup y: {pickup_motor_counts_y}")
-        print(f"dest x: {dest_motor_counts_x}")
-        print(f"dest y: {dest_motor_counts_y}")
-        print(f"angle: {destination_angle_motor_counts}")
+            # Add in the motor offset of the photo and the motor offset of the gripper to find the absolute 
+            # location of the pickup point in robot coordinates.
+            pickup_motor_counts_x = int(
+                piece["robot_state"]["photo_at_motor_position"][0] + 
+                -motor_counts_incenter_x + 
+                float(self.camera_to_gripper_x_transform_textbox.text())
+            )
+            pickup_motor_counts_y = int(
+                piece["robot_state"]["photo_at_motor_position"][1] + 
+                -motor_counts_incenter_y + 
+                float(self.camera_to_gripper_y_transform_textbox.text())
+            )
         
-        # Re-enable the UI when we're finished working on the solution
-        self.move_pieces_into_place_button.setEnabled(True)
+            # Determine the destination angle
+            destination_angle_radians = piece["dest_rotation"]
+            destination_angle_degrees = destination_angle_radians * (180/math.pi)
+        
+            # Convert the angle from degrees to rotational motor counts
+            destination_angle_motor_counts = destination_angle_degrees * ROTATION_MOTOR_COUNTS_PER_DEGREE
+        
+            # Motor only accepts positive motor counts, so if angle is negative, 
+            # convert it to the corresponding positive angle.
+            if (destination_angle_motor_counts < 0):
+                destination_angle_motor_counts = MAX_ROTATION_MOTOR_COUNTS + destination_angle_motor_counts            
+        
+            # Find the destination point w.r.t the top left origin, in pixel space
+            dest_photo_space_incenter_x, dest_photo_space_incenter_y = piece["dest_photo_space_incenter"]
+        
+            # print(f"dest_photo_space_incenter_x: {dest_photo_space_incenter_x}")
+            # print(f"dest_photo_space_incenter_y: {dest_photo_space_incenter_y}")
+        
+            # Transform the destination point pixels x,y into motor counts x,y            
+            dest_motor_counts_x = dest_photo_space_incenter_x * float(self.motor_counts_x_per_px_x_textbox.text())
+            dest_motor_counts_y = dest_photo_space_incenter_y * float(self.motor_counts_y_per_px_y_textbox.text())
+        
+            # print(f"dest_motor_counts_x: {dest_motor_counts_x}")
+            # print(f"dest_motor_counts_y: {dest_motor_counts_y}")
+        
+            # Add in the desired motor origin of where we want the puzzle solution to go, and also add
+            # in the motor offset of the gripper, to find the absolute location of the destination drop-off point
+            # in robot coordinates
+            solution_motor_origin = (80000, 285000)
+
+            # print(f"float(self.camera_to_gripper_x_transform_textbox.text(): {float(self.camera_to_gripper_x_transform_textbox.text())}")
+            # print(f"float(self.camera_to_gripper_y_transform_textbox.text(): {float(self.camera_to_gripper_y_transform_textbox.text())}")
+
+            dest_motor_counts_x += solution_motor_origin[0] + float(self.camera_to_gripper_x_transform_textbox.text())
+            dest_motor_counts_y += solution_motor_origin[1] + float(self.camera_to_gripper_y_transform_textbox.text())
+        
+            # Round all motor counts
+            destination_angle_motor_counts = round(destination_angle_motor_counts)
+            pickup_motor_counts_x = round(pickup_motor_counts_x)
+            pickup_motor_counts_y = round(pickup_motor_counts_y)
+            dest_motor_counts_x = round(dest_motor_counts_x)
+            dest_motor_counts_y = round(dest_motor_counts_y)
+
+            # # print it out
+            # print(f"pickup x: {pickup_motor_counts_x}")
+            # print(f"pickup y: {pickup_motor_counts_y}")
+            # print(f"dest x: {dest_motor_counts_x}")
+            # print(f"dest y: {dest_motor_counts_y}")
+            # print(f"angle: {destination_angle_motor_counts}")
+            
+            # Add this move to the output textarea
+            move = f"{pickup_motor_counts_x},{pickup_motor_counts_y} => {dest_motor_counts_x},{dest_motor_counts_y},{destination_angle_motor_counts}"
+            self.list_moves_textarea.insertHtml(f"{move}<br />")
+        
+        # Re-enable the UI when we're finished
+        self.list_moves_button.setEnabled(True)
+        self.perform_moves_button.setEnabled(True)
         self.set_clearcore_availability(True)
         self.set_gripper_availability(True)
         

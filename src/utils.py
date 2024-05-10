@@ -9,6 +9,43 @@ BOTTOM_CROP_PIXELS = 11
 RIGHT_CROP_PIXELS = 9
 TOP_CROP_PIXELS = 11
 
+def manhattan_distance(point1, point2):
+    x1,y1 = point1
+    x2,y2 = point2
+    return abs(x2-x1) + abs(y2-y1)
+    
+def anchor_order(pieces):
+    """Returns the pieces in 'anchor' order, starting at the origin and extending out in a triangular fashion."""
+    
+    # Make sure 'points' is a proper list and not merely an iterable,
+    # because we need to iterate often and slice it and so forth.
+    pieces = list(pieces)
+    
+    # If points is empty, return an empty list
+    if len(pieces) == 0: return []
+    
+    # First find the maximum x and y values
+    max_x, max_y = max(pieces)
+
+    pieces_in_anchor_order = []
+    total_pieces_to_place = (max_x + 1) * (max_y + 1)
+
+    # Put the origin piece (0,0) in the list to start things off
+    distance = 0
+    origin = [0,0]
+    pieces_in_anchor_order.append(origin)
+
+    while len(pieces_in_anchor_order) < total_pieces_to_place:
+        # Find all the pieces at the current manhattan distance
+        distance += 1
+        pieces_at_distance = [p for p in pieces if manhattan_distance(origin, p) == distance]
+        # Sort those pieces by x (ascending, starting at x=0)
+        pieces_at_distance.sort(key=lambda p: p[0])
+        # Add those pieces to the solution
+        pieces_in_anchor_order.extend(pieces_at_distance)
+
+    return pieces_in_anchor_order
+
 def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coefficients):
     """Open image_path as an opencv image, undistort it, rotate if necessary, and return the image"""
     # Open the image using cv
