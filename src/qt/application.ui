@@ -60,7 +60,7 @@ QLineEdit {
        <enum>QTabWidget::North</enum>
       </property>
       <property name="currentIndex">
-       <number>5</number>
+       <number>3</number>
       </property>
       <property name="elideMode">
        <enum>Qt::ElideRight</enum>
@@ -2399,7 +2399,7 @@ max-width: 100px;</string>
                <item>
                 <widget class="QLabel" name="label_22">
                  <property name="text">
-                  <string>MINIMUM OVERLAP</string>
+                  <string>MAXIMUM STEP SIZE</string>
                  </property>
                 </widget>
                </item>
@@ -2420,7 +2420,7 @@ max-width: 100px;</string>
                   </widget>
                  </item>
                  <item row="1" column="1">
-                  <widget class="QLineEdit" name="overlap_y_textbox">
+                  <widget class="QLineEdit" name="max_step_size_y_textbox">
                    <property name="styleSheet">
                     <string notr="true">min-width: 100px;
 max-width: 100px;</string>
@@ -2431,7 +2431,7 @@ max-width: 100px;</string>
                   </widget>
                  </item>
                  <item row="1" column="0">
-                  <widget class="QLineEdit" name="overlap_x_textbox">
+                  <widget class="QLineEdit" name="max_step_size_x_textbox">
                    <property name="styleSheet">
                     <string notr="true">min-width: 100px;
 max-width: 100px;</string>
@@ -2574,7 +2574,7 @@ max-height: 400px;</string>
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_solve_puzzle">
+      <widget class="QWidget" name="tab_compute_solution">
        <attribute name="title">
         <string>COMPUTE SOLUTION</string>
        </attribute>
@@ -2758,7 +2758,7 @@ SOLUTION ▶️</string>
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab">
+      <widget class="QWidget" name="tab_move_pieces">
        <attribute name="title">
         <string>MOVE PIECES</string>
        </attribute>
@@ -3018,8 +3018,8 @@ min-width: 150px;</string>
   <tabstop>end_x_textbox</tabstop>
   <tabstop>end_y_textbox</tabstop>
   <tabstop>end_z_textbox</tabstop>
-  <tabstop>overlap_x_textbox</tabstop>
-  <tabstop>overlap_y_textbox</tabstop>
+  <tabstop>max_step_size_x_textbox</tabstop>
+  <tabstop>max_step_size_y_textbox</tabstop>
   <tabstop>screenshot_button</tabstop>
   <tabstop>camera_calibration_checker_rows_spinbox</tabstop>
   <tabstop>camera_calibration_checker_columns_spinbox</tabstop>

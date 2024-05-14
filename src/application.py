@@ -529,8 +529,8 @@ class Ui(QMainWindow):
         self.end_x_textbox.textChanged.connect(self.write_serpentine_config)
         self.end_y_textbox.textChanged.connect(self.write_serpentine_config)
         self.end_z_textbox.textChanged.connect(self.write_serpentine_config)
-        self.overlap_x_textbox.textChanged.connect(self.write_serpentine_config)
-        self.overlap_y_textbox.textChanged.connect(self.write_serpentine_config)
+        self.max_step_size_x_textbox.textChanged.connect(self.write_serpentine_config)
+        self.max_step_size_y_textbox.textChanged.connect(self.write_serpentine_config)
         
         # Configure buttons
         self.puzzle_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.serpentine_photo_directory_textbox))
@@ -593,17 +593,17 @@ class Ui(QMainWindow):
         self.solver_batch_photos_dir = posixpath.join(solver_directory, str(current_batch_number), "0_photos")
         os.makedirs(self.solver_batch_photos_dir)
         
-        # Calculate delta movements to satisfy minimum overlap and equal (integer) overlap requirements
+        # Calculate delta movements to satisfy maximum step size and equal (integer) step size requirements
         start_x = int(self.start_x_textbox.text())
         start_y = int(self.start_y_textbox.text())
         start_z = int(self.start_z_textbox.text())
         end_x = int(self.end_x_textbox.text())
         end_y = int(self.end_y_textbox.text())
         end_z = int(self.end_z_textbox.text())
-        min_x_overlap = int(self.overlap_x_textbox.text())
-        min_y_overlap = int(self.overlap_y_textbox.text())
-        num_x_passes = math.ceil((end_x - start_x) / min_x_overlap)
-        num_y_passes = math.ceil((end_y - start_y) / min_y_overlap)
+        max_x_step_size = int(self.max_step_size_x_textbox.text())
+        max_y_step_size = int(self.max_step_size_y_textbox.text())
+        num_x_passes = math.ceil((end_x - start_x) / max_x_step_size)
+        num_y_passes = math.ceil((end_y - start_y) / max_y_step_size)
         total_photos = num_x_passes * num_y_passes
         x_pass_distance = math.floor((end_x - start_x) / num_x_passes)
         y_pass_distance = math.floor((end_y - start_y) / num_y_passes)
@@ -766,8 +766,9 @@ class Ui(QMainWindow):
         batch_info['end_x'] = self.end_x_textbox.text()
         batch_info['end_y'] = self.end_y_textbox.text()
         batch_info['end_z'] = self.end_z_textbox.text()
-        batch_info['overlap_x'] = self.overlap_x_textbox.text()
-        batch_info['overlap_y'] = self.overlap_y_textbox.text()
+        batch_info['max_step_size_x'] = self.max_step_size_x_textbox.text()
+        batch_info['max_step_size_y'] = self.max_step_size_y_textbox.text()
+        
         
         # Write the JSON file back to disk
         with open(batch_info_file, "w") as jsonfile:
@@ -805,8 +806,8 @@ class Ui(QMainWindow):
             self.end_x_textbox.setText(self.config.get('end_x', ''))
             self.end_y_textbox.setText(self.config.get('end_y', ''))
             self.end_z_textbox.setText(self.config.get('end_z', ''))
-            self.overlap_x_textbox.setText(self.config.get('overlap_x', ''))
-            self.overlap_y_textbox.setText(self.config.get('overlap_y', ''))
+            self.max_step_size_x_textbox.setText(self.config.get('max_step_size_x', ''))
+            self.max_step_size_y_textbox.setText(self.config.get('max_step_size_y', ''))
     
     def write_serpentine_config(self):
         """Update self.config from serpentine tab input boxes and write it to a JSON-formatted config file"""
@@ -818,8 +819,8 @@ class Ui(QMainWindow):
         self.config['end_x'] = self.end_x_textbox.text()
         self.config['end_y'] = self.end_y_textbox.text()
         self.config['end_z'] = self.end_z_textbox.text()
-        self.config['overlap_x'] = self.overlap_x_textbox.text()
-        self.config['overlap_y'] = self.overlap_y_textbox.text()
+        self.config['max_step_size_x'] = self.max_step_size_x_textbox.text()
+        self.config['max_step_size_y'] = self.max_step_size_y_textbox.text()
         
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
