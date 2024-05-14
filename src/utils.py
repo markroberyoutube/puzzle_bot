@@ -3,6 +3,12 @@ import json
 import cv2 as cv
 from scipy import stats
 import unicodedata
+import logging
+import sys
+import exif
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
 LEFT_CROP_PIXELS = 20
 BOTTOM_CROP_PIXELS = 11
@@ -50,13 +56,6 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
     """Open image_path as an opencv image, undistort it, rotate if necessary, and return the image"""
     # Open the image using cv
     img = cv.imread(image_path)
-    
-    # Convert pre-calculated intrinsics to np arrays if they are not already np arrays
-    camera_matrix = np.float32(camera_matrix)
-    distortion_coefficients = np.float32(distortion_coefficients)
-
-    # Undistort the image (causes a black border to appear around the image.. will be cropped later in this function)
-    img = cv.undistort(img, camera_matrix, distortion_coefficients)
 
     # If exif orientation information exists, rotate img accordingly
     # Note that this rotation uses a matrix transformation so no information is lost
@@ -75,7 +74,7 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
             else:
                 logger.error(f"[open_image_and_fix_orientation] Unsupported jpg orientation: {orientation}")
     except Exception as e:
-        pass
+        logger.error(f"[open_image_and_fix_orientation] Error reading exif: {e}")
     
     # In some scenarios the phone will output a photo in vertical format
     # but will set the orientation flag to normal. To counteract this,
@@ -83,6 +82,13 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
     height, width, channels = img.shape
     if height > width:
         img = cv.rotate(img, cv.ROTATE_90_CLOCKWISE)
+    
+    # Convert pre-calculated intrinsics to np arrays if they are not already np arrays
+    #camera_matrix = np.float32(camera_matrix)
+    #distortion_coefficients = np.float32(distortion_coefficients)
+
+    # Undistort the image (causes a black border to appear around the image.. will be cropped later in this function)
+    #img = cv.undistort(img, camera_matrix, distortion_coefficients)
     
     # Finally crop the image to get rid of the empty space caused by the un-distortion
     height, width, channels = img.shape # Get these again because rotate may have changed them!
