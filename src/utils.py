@@ -20,14 +20,54 @@ def manhattan_distance(point1, point2):
     x2,y2 = point2
     return abs(x2-x1) + abs(y2-y1)
     
-def anchor_order(pieces):
-    """Returns the pieces in 'anchor' order, starting at the origin and extending out in a triangular fashion."""
     
-    # Make sure 'points' is a proper list and not merely an iterable,
+def spiral_order(pieces):
+    """Returns the pieces in 'spiral' order, starting at the origin and extending out in a clockwise spiral."""
+
+    # Make sure 'pieces' is a proper list and not merely an iterable,
     # because we need to iterate often and slice it and so forth.
     pieces = list(pieces)
     
-    # If points is empty, return an empty list
+    # If pieces is empty, return an empty list
+    if len(pieces) == 0: return []
+
+    # First find the number of rows and cols
+    max_x, max_y = max(pieces)
+    rows = max_y + 1
+    cols = max_x + 1
+    
+    # Compute the list in lexical order (left to right, top to bottom, considering top left as origin), to help us later
+    pieces_in_lexical_order = []
+    for y in range(rows):
+        for x in range(cols):
+            pieces_in_lexical_order.append([x,y])
+    
+    # Reshape that into an array of arrays (of point tuples)
+    pieces_in_lexical_order = np.array(pieces_in_lexical_order).reshape([rows, cols, 2])
+    
+    # Slice it in a spiral pattern
+    pieces_in_spiral_order = []
+    while (len(pieces_in_lexical_order) > 0):
+        # Take the top row (the first array) and add it to the output
+        row = pieces_in_lexical_order[0]
+        pieces_in_spiral_order.extend(row)
+        # Now remove that top row
+        pieces_in_lexical_order = pieces_in_lexical_order[1:]
+        # Now rotate the array counter-clockwise
+        pieces_in_lexical_order = np.rot90(pieces_in_lexical_order) 
+        
+    return pieces_in_spiral_order
+
+    
+    
+def anchor_order(pieces):
+    """Returns the pieces in 'anchor' order, starting at the origin and extending out in a triangular fashion."""
+    
+    # Make sure 'pieces' is a proper list and not merely an iterable,
+    # because we need to iterate often and slice it and so forth.
+    pieces = list(pieces)
+    
+    # If pieces is empty, return an empty list
     if len(pieces) == 0: return []
     
     # First find the maximum x and y values
