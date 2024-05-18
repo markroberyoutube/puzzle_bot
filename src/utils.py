@@ -97,6 +97,10 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
     # Open the image using cv
     img = cv.imread(image_path)
 
+    # Rotate the image before we un-distort, because camera matrix and distortion parameters were
+    # computed on images in the normal horizontal rotation, so we need to rotate to that orientation
+    # before we undistort.
+
     # If exif orientation information exists, rotate img accordingly
     # Note that this rotation uses a matrix transformation so no information is lost
     try:
