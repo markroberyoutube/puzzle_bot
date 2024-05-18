@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-from utils import parse_int, open_image_undistorted_and_rotated, anchor_order
+from utils import parse_int, open_image_undistorted_and_rotated, anchor_order, spiral_order
 from serial_driver import Gripper, ClearCore, DummyClearCore
 from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
@@ -33,8 +33,8 @@ from common.config import *
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
 SAFE_TRAVEL_Z = 30000
-DROPOFF_Z = 3000
-PICKUP_Z = 0
+DROPOFF_Z = 9000
+PICKUP_Z = 9000
 
 INPUT_IMAGE_WIDTH = 4000
 
@@ -1475,9 +1475,6 @@ class Ui(QMainWindow):
         # pickup_x, pickup_y => drop_x, drop_y, angle
         # all values are in absolute motor counts
         # Store all of those "moves" into the output text area
-        # The moves should be listed with the top left corner piece first, and then scanning 
-        # on a lower-left to upper-right diagonal so that a triangle is formed which we are
-        # hoping will help anchor the pieces
         max_x = 0
         max_y = 0
         for piece in solution:
@@ -1486,12 +1483,12 @@ class Ui(QMainWindow):
             if piece["solution_y"] > max_y:
                 max_y = piece["solution_y"]
         
-        # Sort the pieces in anchor order
+        # Sort the pieces in spiral order
         all_pieces = np.ndindex((max_x + 1, max_y + 1))
-        pieces_in_anchor_order = anchor_order(all_pieces)
+        pieces_in_spiral_order = spiral_order(all_pieces)
         
         # For each piece coordinate in order, find the desired move
-        for x,y in pieces_in_anchor_order:
+        for x,y in pieces_in_spiral_order:
             piece = [p for p in solution if p["solution_x"] == x and p["solution_y"] == y][0]
 
             # Find the pickup point w.r.t the photo origin, in pixels
@@ -1570,7 +1567,7 @@ class Ui(QMainWindow):
             logging.debug(f"angle: {destination_angle_motor_counts}")
             
             # Add this move to the output textarea
-            move = f"{pickup_motor_counts_x},{pickup_motor_counts_y} => {dest_motor_counts_x},{dest_motor_counts_y},{destination_angle_motor_counts}"
+            move = f"({x},{y}): {pickup_motor_counts_x},{pickup_motor_counts_y} => {dest_motor_counts_x},{dest_motor_counts_y},{destination_angle_motor_counts}"
             self.list_moves_textarea.insertHtml(f"{move}<br />")
             QApplication.processEvents()
         
@@ -1585,7 +1582,8 @@ class Ui(QMainWindow):
         moves = self.perform_moves_textarea.toPlainText()
         for move in moves.splitlines():
             # Parse each of the moves
-            src, dest = move.split("=>")
+            label, data = move.split(":")
+            src, dest = data.strip(" ").split("=>")
             src_x, src_y = src.strip().split(",")
             dst_x, dst_y, dst_angle = dest.strip().split(",")
 
