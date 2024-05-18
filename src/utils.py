@@ -124,11 +124,11 @@ def open_image_undistorted_and_rotated(image_path, camera_matrix, distortion_coe
         img = cv.rotate(img, cv.ROTATE_90_CLOCKWISE)
     
     # Convert pre-calculated intrinsics to np arrays if they are not already np arrays
-    #camera_matrix = np.float32(camera_matrix)
-    #distortion_coefficients = np.float32(distortion_coefficients)
+    camera_matrix = np.float32(camera_matrix)
+    distortion_coefficients = np.float32(distortion_coefficients)
 
     # Undistort the image (causes a black border to appear around the image.. will be cropped later in this function)
-    #img = cv.undistort(img, camera_matrix, distortion_coefficients)
+    img = cv.undistort(img, camera_matrix, distortion_coefficients)
     
     # Finally crop the image to get rid of the empty space caused by the un-distortion
     height, width, channels = img.shape # Get these again because rotate may have changed them!
