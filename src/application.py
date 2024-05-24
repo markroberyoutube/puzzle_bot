@@ -608,6 +608,9 @@ class Ui(QMainWindow):
         x_pass_distance = math.floor((end_x - start_x) / num_x_passes)
         y_pass_distance = math.floor((end_y - start_y) / num_y_passes)
         
+        # ICC uncomment to skip all but last two rows (useful during experimentation)
+        # start_y += (y_pass_distance * (num_y_passes-1))
+
         # Move to each photo location and take a photo
         num_photos_taken = 1
         x = start_x
