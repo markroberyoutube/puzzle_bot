@@ -10,10 +10,10 @@ import exif
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
-LEFT_CROP_PIXELS = 20
+LEFT_CROP_PIXELS = 13 # ICC Was 20
 BOTTOM_CROP_PIXELS = 11
-RIGHT_CROP_PIXELS = 9
-TOP_CROP_PIXELS = 11
+RIGHT_CROP_PIXELS = 19 # Was 9
+TOP_CROP_PIXELS = 13 # Was 11
 
 def manhattan_distance(point1, point2):
     x1,y1 = point1
