@@ -87,18 +87,18 @@ class GalaxyS24(QThread):
             # NOTE: It NEEDS to have been on the following settings the last time it was opened:
             # PRO mode, 12Mp, ISO 100 (locked/yellow), Speed 1/15 (locked/yellow), 
             # Focus manual (locked/yellow), White balance 5300k (locked/yellow),
-            # Flash on (icon is yellow), 3:4 aspect ratio, Matrix metering, no timer, 
-            # Intelligent optimization: maximum
+            # Flash OFF (icon is white), 3:4 aspect ratio, no timer, 
+            # Intelligent optimization: minimum
             if not self.adb("adb shell am start -n com.sec.android.app.camera/com.sec.android.app.camera.Camera", 2000)[0]: return
         
             # Select the 5X "Super Telescopic" lens 
             if not self.adb("adb shell input tap 676 1433", 2000)[0]: return
         
             # Click "Focus: Manual"
-            if not self.adb("adb shell input tap 768 1616", 1000)[0]: return
+            # if not self.adb("adb shell input tap 768 1616", 1000)[0]: return
 
             # Click "Multi" to enable a multi-point auto focus (and wait 3 secs for camera to focus)
-            if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
+            # if not self.adb("adb shell input tap 536 1610", 3000)[0]: return
             
             # Click "Center" to enable a center auto focus (and wait 3 secs for camera to focus)
             #if not self.adb("adb shell input tap 277 1592", 3000)[0]: return
@@ -106,9 +106,9 @@ class GalaxyS24(QThread):
             # Click "Manual" to disable auto focus
             #if not self.adb("adb shell input tap 799 1626", 1000)[0]: return
 
-        # Take the photo (Tap the shutter button) and wait 2 seconds for the camera to take the photo
+        # Take the photo (Tap the shutter button) and wait for the camera to take the photo
         logging.debug("[GalaxyS24.capture_photo] Taking photo...")
-        if not self.adb("adb shell input tap 534 2006", 5000)[0]: return # ICC changed 2000 to 5000 to make it work
+        if not self.adb("adb shell input tap 534 2006", 1000)[0]: return # ICC use 5000 for autofocus, 1000 for manual focus
 
         # Find the most recently taken photo
         retcode, stdout = self.adb("adb shell ls -clr sdcard/DCIM/Camera/*.jpg | tail -n 1 | awk \'{print $NF}\'", 0)
