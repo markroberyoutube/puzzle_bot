@@ -36,6 +36,8 @@ SAFE_TRAVEL_Z = 30000
 DROPOFF_Z = 9000
 PICKUP_Z = 9000
 
+CAMERA_Z = 136000
+
 INPUT_IMAGE_WIDTH = 4000
 
 APPLICATION_NAME = "Puzzlin' Pete"
@@ -83,6 +85,7 @@ class Ui(QMainWindow):
         self.setup_move_robot_tab()
         self.setup_serpentine_photos_tab()
         self.setup_camera_calibration_tab()
+        self.setup_perspective_calibration_tab()
         self.setup_gripper_calibration_tab()
         self.setup_compute_solution_tab()
         self.setup_perform_moves_tab()
@@ -506,6 +509,630 @@ class Ui(QMainWindow):
 
     ################################################################################################
     ################################################################################################
+    # "CAMERA CALIBRATION" TAB
+    ################################################################################################
+    ################################################################################################
+    def setup_camera_calibration_tab(self):
+        """Configure UI on the CAMERA CALIBRATION tab"""
+        # Read the config file and update all textboxes
+        self.read_camera_calibration_config()
+        
+        # Configure all textboxes to auto-save config file upon change
+        self.camera_calibration_checker_rows_spinbox.valueChanged.connect(self.write_camera_calibration_config)
+        self.camera_calibration_checker_columns_spinbox.valueChanged.connect(self.write_camera_calibration_config)
+        self.camera_calibration_checker_width_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_calibration_checker_height_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.pre_camera_calibration_photo_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_calibration_photo_directory_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.post_camera_calibration_photo_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_fx_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_fy_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_cx_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_cy_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_k1_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_k2_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_k3_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_p1_textbox.textChanged.connect(self.write_camera_calibration_config)
+        self.camera_p2_textbox.textChanged.connect(self.write_camera_calibration_config)
+
+        # Configure buttons
+        self.camera_calibration_button.clicked.connect(self.perform_camera_calibration)
+        self.pre_camera_calibration_measure_error_button.clicked.connect(self.measure_pre_camera_calibration_error)
+        self.post_camera_calibration_measure_error_button.clicked.connect(self.measure_post_camera_calibration_error)
+        self.pre_camera_calibration_photo_browse_button.clicked.connect(lambda: self.browse_for_image(self.pre_camera_calibration_photo_textbox, self.pre_camera_calibration_example_photo_label))
+        self.post_camera_calibration_photo_browse_button.clicked.connect(lambda: self.browse_for_image(self.post_camera_calibration_photo_textbox, self.post_camera_calibration_example_photo_label))
+        self.camera_calibration_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.camera_calibration_photo_directory_textbox))
+        
+        # Start up a thread for the camera calibration functionality
+        self.camera_calibration = CameraCalibration(parent=self)
+        self.camera_calibration.start()
+    
+    def measure_checkerboard_error(self, image_path, rms_error_textbox, max_error_textbox, annotated_image_label_area):
+        """Find features in an image, fit lines to the rows and columns, and measure error of that fit"""
+        # Make sure the selected image exists
+        if not image_path or not posixpath.exists(image_path):
+            logger.error(f"[Ui.measure_checkerboard_error] File does not exist at {image_path}")
+            return
+        
+        # Obtain checkerboard params
+        checker_rows = self.camera_calibration_checker_rows_spinbox.value()
+        checker_columns = self.camera_calibration_checker_columns_spinbox.value()
+        checker_width = float(self.camera_calibration_checker_width_textbox.text())
+        checker_height = float(self.camera_calibration_checker_height_textbox.text())
+        
+        # Set up a callback to report the results
+        @pyqtSlot(float, float, float, float, str)
+        def on_results(average_rms_error_px, max_error_px, average_rms_error_inches, max_error_inches, annotated_image_path):
+            # Remove this callback
+            self.camera_calibration.checkerboard_error_measurements_ready.disconnect(on_results)
+            # Report the results
+            rms_error_textbox.setText(f"{round(average_rms_error_px, 2)} px ({round(average_rms_error_inches, 5)} inches)")
+            max_error_textbox.setText(f"{round(max_error_px, 2)} px ({round(max_error_inches, 5)} inches)")
+            self.display_image(annotated_image_path, annotated_image_label_area)
+        self.camera_calibration.checkerboard_error_measurements_ready.connect(on_results)
+        # Trigger a measurement
+        self.camera_calibration.trigger_checkerboard_error_measurements.emit(
+            image_path, checker_rows, checker_columns, checker_width, checker_height
+        )
+
+    @pyqtSlot()
+    def measure_pre_camera_calibration_error(self):
+        """Take a measurement of the error in an uncalibrated image"""
+        image_path = self.pre_camera_calibration_photo_textbox.text()
+        self.measure_checkerboard_error(
+            image_path, 
+            self.pre_camera_calibration_rms_error_textbox,
+            self.pre_camera_calibration_max_error_textbox,
+            self.pre_camera_calibration_error_visualization_label
+        )
+        
+    def get_camera_intrinsics(self):
+        """Return (camera_matrix, distortion_coefficients) arrays from textbox infos"""
+        # Put together camera matrix and distortion coefficients
+        # [[fx 0  cx]
+        #  [0  fy cy]
+        #  [0  0  1]]
+        camera_matrix = [[0, 0, 0],[0, 0, 0],[0, 0, 1]]
+        camera_matrix[0][0] = float(self.camera_fx_textbox.text() or 0)
+        camera_matrix[1][1] = float(self.camera_fy_textbox.text() or 0)
+        camera_matrix[0][2] = float(self.camera_cx_textbox.text() or 0)
+        camera_matrix[1][2] = float(self.camera_cy_textbox.text() or 0)
+        # Distortion coefficients:
+        distortion_coefficients = [[0, 0, 0, 0, 0]] # [[k1, k2, p1, p2, k3]]
+        distortion_coefficients[0][0] = float(self.camera_k1_textbox.text() or 0)
+        distortion_coefficients[0][1] = float(self.camera_k2_textbox.text() or 0)
+        distortion_coefficients[0][2] = float(self.camera_p1_textbox.text() or 0)
+        distortion_coefficients[0][3] = float(self.camera_p2_textbox.text() or 0)
+        distortion_coefficients[0][4] = float(self.camera_k3_textbox.text() or 0)
+        # Return results
+        return (camera_matrix, distortion_coefficients)
+    
+    @pyqtSlot()
+    def measure_post_camera_calibration_error(self):
+        # Compute source and destination file paths
+        source_image_path = self.post_camera_calibration_photo_textbox.text()
+        path_parts = source_image_path.split(".")
+        destination_image_path = ".".join(path_parts[:-1]) + "-undistorted." + path_parts[-1]
+        
+        # Compute camera intrinsics
+        camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+        logging.debug(f"[Ui.measure_post_camera_calibration_error] matrix: {camera_matrix}\ndistortion: {distortion_coefficients}")
+        
+        # Setup a callback to report the results
+        @pyqtSlot()
+        def on_results():
+            # Remove this callback
+            self.camera_calibration.undistorted_image_ready.disconnect(on_results)    
+            # Display the undistorted image along with error measurements
+            self.measure_checkerboard_error(
+                destination_image_path, 
+                self.post_camera_calibration_rms_error_textbox,
+                self.post_camera_calibration_max_error_textbox,
+                self.post_camera_calibration_error_visualization_label
+            )
+        # Connect the callback
+        self.camera_calibration.undistorted_image_ready.connect(on_results)
+        
+        # Trigger undistortion process
+        self.camera_calibration.trigger_undistort_image.emit(
+            source_image_path, destination_image_path, camera_matrix, distortion_coefficients
+        )
+
+    @pyqtSlot()
+    def perform_camera_calibration(self):
+        """Perform camera calibration routine"""
+        # Setup a callback to report the results.
+        @pyqtSlot(float, float, list, list)
+        def on_results(rms_rpe, max_error, camera_matrix, distortion_coefficients):
+            # Remove this callback
+            self.camera_calibration.camera_calibration_results_ready.disconnect(on_results)
+            # Camera matrix:
+            # [[fx 0  cx]
+            #  [0  fy cy]
+            #  [0  0  1]]
+            self.camera_fx_textbox.setText(str(round(camera_matrix[0][0],5)))
+            self.camera_fy_textbox.setText(str(round(camera_matrix[1][1],5)))
+            self.camera_cx_textbox.setText(str(round(camera_matrix[0][2],5)))
+            self.camera_cy_textbox.setText(str(round(camera_matrix[1][2],5)))
+            # Distortion coefficients:
+            # [[k1, k2, p1, p2, k3]]
+            self.camera_k1_textbox.setText(str(round(distortion_coefficients[0][0],5)))
+            self.camera_k2_textbox.setText(str(round(distortion_coefficients[0][1],5)))
+            self.camera_p1_textbox.setText(str(round(distortion_coefficients[0][2],5)))
+            self.camera_p2_textbox.setText(str(round(distortion_coefficients[0][3],5)))
+            self.camera_k3_textbox.setText(str(round(distortion_coefficients[0][4],5)))
+            # Report rms and max errors
+            self.camera_calibration_rms_error_textbox.setText(str(round(rms_rpe,5)))
+            self.camera_calibration_max_error_textbox.setText(str(round(max_error,5)))
+        # Add the callback
+        self.camera_calibration.camera_calibration_results_ready.connect(on_results)
+        
+        # Obtain checkerboard params
+        checker_rows = self.camera_calibration_checker_rows_spinbox.value()
+        checker_columns = self.camera_calibration_checker_columns_spinbox.value()
+        checker_width = float(self.camera_calibration_checker_width_textbox.text())
+        checker_height = float(self.camera_calibration_checker_height_textbox.text())
+        
+        # Get camera intrinsics from textboxes
+        camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+        
+        # Trigger the camera calibration routine
+        photo_directory = self.camera_calibration_photo_directory_textbox.text()
+        self.camera_calibration.trigger_camera_calibration.emit(
+            photo_directory, checker_rows, checker_columns, checker_width, checker_height, camera_matrix, distortion_coefficients
+        )
+    
+    def read_camera_calibration_config(self):
+        """Update camera calibration tab input boxes from JSON-formatted config file"""
+        with open(self.config_file_path, "r") as jsonfile:
+            self.config = json.load(jsonfile)
+            self.camera_calibration_checker_rows_spinbox.setValue(self.config.get('camera_calibration_checker_rows', 0))
+            self.camera_calibration_checker_columns_spinbox.setValue(self.config.get('camera_calibration_checker_columns', 0))
+            self.camera_calibration_checker_width_textbox.setText(self.config.get('camera_calibration_checker_width', '0.0'))
+            self.camera_calibration_checker_height_textbox.setText(self.config.get('camera_calibration_checker_height', '0.0'))
+            self.pre_camera_calibration_photo_textbox.setText(self.config.get('pre_camera_calibration_image', ''))
+            self.camera_calibration_photo_directory_textbox.setText(self.config.get('camera_calibration_photo_directory', ''))
+            self.post_camera_calibration_photo_textbox.setText(self.config.get('post_camera_calibration_image', ''))
+            self.camera_fx_textbox.setText(self.config.get('camera_fx', ''))
+            self.camera_fy_textbox.setText(self.config.get('camera_fy', ''))
+            self.camera_cx_textbox.setText(self.config.get('camera_cx', ''))
+            self.camera_cy_textbox.setText(self.config.get('camera_cy', ''))
+            self.camera_k1_textbox.setText(self.config.get('camera_k1', ''))
+            self.camera_k2_textbox.setText(self.config.get('camera_k2', ''))
+            self.camera_k3_textbox.setText(self.config.get('camera_k3', ''))
+            self.camera_p1_textbox.setText(self.config.get('camera_p1', ''))
+            self.camera_p2_textbox.setText(self.config.get('camera_p2', ''))
+    
+    def write_camera_calibration_config(self):
+        """Update self.config from camera calibration tab input boxes and write it to a JSON-formatted config file"""
+        # Update self.config from input boxes
+        self.config['camera_calibration_checker_rows'] = self.camera_calibration_checker_rows_spinbox.value()
+        self.config['camera_calibration_checker_columns'] = self.camera_calibration_checker_columns_spinbox.value()
+        self.config['camera_calibration_checker_width'] = self.camera_calibration_checker_width_textbox.text()
+        self.config['camera_calibration_checker_height'] = self.camera_calibration_checker_height_textbox.text()
+        self.config['pre_camera_calibration_image'] = self.pre_camera_calibration_photo_textbox.text()
+        self.config['camera_calibration_photo_directory'] = self.camera_calibration_photo_directory_textbox.text()
+        self.config['post_camera_calibration_image'] = self.post_camera_calibration_photo_textbox.text()
+        self.config['camera_fx'] = self.camera_fx_textbox.text()
+        self.config['camera_fy'] = self.camera_fy_textbox.text()
+        self.config['camera_cx'] = self.camera_cx_textbox.text()
+        self.config['camera_cy'] = self.camera_cy_textbox.text()
+        self.config['camera_k1'] = self.camera_k1_textbox.text()
+        self.config['camera_k2'] = self.camera_k2_textbox.text()
+        self.config['camera_k3'] = self.camera_k3_textbox.text()
+        self.config['camera_p1'] = self.camera_p1_textbox.text()
+        self.config['camera_p2'] = self.camera_p2_textbox.text()
+        
+        # Write self.config to a JSON-formatted config file
+        with open(self.config_file_path, "w") as jsonfile:
+            json.dump(self.config, jsonfile)
+            
+
+    ################################################################################################
+    ################################################################################################
+    # "PERSPECTIVE CALIBRATION" TAB
+    ################################################################################################
+    ################################################################################################
+    def setup_perspective_calibration_tab(self):
+        """Configure UI on the PERSPECTIVE CALIBRATION tab"""
+        # Read the config file and update all textboxes
+        self.read_perspective_calibration_config()
+        
+        # Configure buttons
+        self.perspective_calibration_photo_directory_browse_button.clicked.connect(
+            lambda: self.browse_for_directory(self.perspective_calibration_photo_directory_textbox)
+        )
+        
+        @pyqtSlot()
+        def perspective_calibration_move_start():
+            # Get desired position
+            x = parse_int(self.perspective_calibration_start_x_textbox.text())
+            y = parse_int(self.perspective_calibration_start_y_textbox.text())
+            z = parse_int(self.perspective_calibration_start_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.perspective_calibration_move_start_button.clicked.connect(perspective_calibration_move_start)
+
+        @pyqtSlot()
+        def perspective_calibration_move_end():
+            # Get desired position
+            x = parse_int(self.perspective_calibration_end_x_textbox.text())
+            y = parse_int(self.perspective_calibration_start_y_textbox.text())
+            z = parse_int(self.perspective_calibration_start_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.perspective_calibration_move_end_button.clicked.connect(perspective_calibration_move_end)
+                
+        @pyqtSlot()
+        def take_perspective_calibration_start_photo():
+            destination_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "start.jpg")
+            self.take_photo(
+                destination_photo_path, 
+                self.perspective_calibration_start_photo_label,
+                correct_distortion=True,
+                correct_rotation=False
+            )
+        self.perspective_calibration_take_start_photo_button.clicked.connect(take_perspective_calibration_start_photo)
+        
+        @pyqtSlot()
+        def take_perspective_calibration_end_photo():
+            destination_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "end.jpg")
+            self.take_photo(
+                destination_photo_path, 
+                self.perspective_calibration_end_photo_label,
+                correct_distortion=True,
+                correct_rotation=False
+            )
+        self.perspective_calibration_take_end_photo_button.clicked.connect(take_perspective_calibration_end_photo)
+        
+
+        self.perspective_calibration_run_calibration_button.clicked.connect(???)
+
+
+    def get_perspective_calibration_batch_dir(self):
+        # Get the main perspective calibration directory from the config data
+        photo_directory = self.config.get('perspective_calibration_photo_directory', '')
+        
+        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
+            logging.error(f"[Ui.get_perspective_calibration_batch_dir] Perspective photo directory does not exist at: {photo_directory}")
+            return
+        
+        # If a batch number hasn't been generated, auto-generate the next batch directory (they are numbered sequentially)
+        batch_dir = None
+        batch_number_text = self.perspective_calibration_photo_batch_number_textbox.text().strip()
+        if batch_number_text and batch_number_text.isnumeric():
+            current_batch_number = int(batch_number_text)
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
+        else:
+            last_batch_number = 0
+            sub_dirs = [d for d in os.listdir(photo_directory) if posixpath.isdir(posixpath.join(photo_directory, d))]
+            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+            batch_dirs.sort(key=int) # sorts in place
+            if batch_dirs:
+                last_batch_number = int(batch_dirs[-1])
+            current_batch_number = last_batch_number + 1
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
+            os.makedirs(batch_dir)
+            self.perspective_calibration_photo_batch_number_textbox.setText(str(current_batch_number))
+        
+        # Finally return the batch directory
+        return batch_dir
+
+    def read_perspective_calibration_config(self):
+        """Update camera calibration tab input boxes from JSON-formatted config file"""
+        with open(self.config_file_path, "r") as jsonfile:
+            self.config = json.load(jsonfile)
+            self.perspective_calibration_start_x_textbox.setText(self.config.get('perspective_calibration_start_x', ''))
+            self.perspective_calibration_start_y_textbox.setText(self.config.get('perspective_calibration_start_y', ''))
+            self.perspective_calibration_end_x_textbox.setText(self.config.get('perspective_calibration_end_x', ''))
+            self.perspective_calibration_photo_directory_textbox.setText(self.config.get('perspective_calibration_photo_directory',''))
+            self.perspective_rotation_angle_textbox.setText(self.config.get('perspective_rotation_angle',''))
+                
+    def write_perspective_calibration_config(self):
+        """Update self.config from camera calibration tab input boxes and write it to a JSON-formatted config file"""
+        # Update self.config from input boxes
+        self.config['perspective_calibration_start_x'] = self.perspective_calibration_start_x_textbox.text()
+        self.config['perspective_calibration_start_y'] = self.perspective_calibration_start_y_textbox.text()
+        self.config['perspective_calibration_end_x'] = self.perspective_calibration_end_x_textbox.text()
+        self.config['perspective_calibration_photo_directory'] = self.perspective_calibration_photo_directory_textbox.text()
+        self.config['perspective_rotation_angle'] = self.perspective_rotation_angle_textbox.text()
+        
+        # Write self.config to a JSON-formatted config file
+        with open(self.config_file_path, "w") as jsonfile:
+            json.dump(self.config, jsonfile)
+            
+                        
+    ################################################################################################
+    ################################################################################################
+    # "GRIPPER CALIBRATION" TAB
+    ################################################################################################
+    ################################################################################################
+    
+    def setup_gripper_calibration_tab(self):
+        """Configure UI on the GRIPPER CALIBRATION tab"""
+        
+        # Read the config file and update all textboxes
+        self.read_gripper_calibration_config()
+        
+        # Configure all textboxes to auto-save config file upon change
+        self.gripper_calibration_start_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_start_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_angle_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_pickup_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_spin_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.gripper_calibration_photo_directory_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.motor_counts_x_per_px_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.motor_counts_y_per_px_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_to_gripper_x_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
+        self.camera_to_gripper_y_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
+
+        # Configure buttons
+        self.gripper_calibration_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.gripper_calibration_photo_directory_textbox))
+        
+        @pyqtSlot()
+        def gripper_calibration_move_start():
+            # Get desired position
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.gripper_calibration_move_start_button.clicked.connect(gripper_calibration_move_start)
+        
+        @pyqtSlot()
+        def gripper_calibration_move_camera_delta():
+            # Get desired position
+            x = parse_int(self.camera_delta_x_textbox.text())
+            y = parse_int(self.camera_delta_y_textbox.text())
+            z = parse_int(self.camera_delta_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.move_camera_delta_button.clicked.connect(gripper_calibration_move_camera_delta)
+        
+        @pyqtSlot()
+        def gripper_calibration_move_gripper_delta():
+            # Get desired position
+            x = parse_int(self.gripper_delta_x_textbox.text())
+            y = parse_int(self.gripper_delta_y_textbox.text())
+            z = parse_int(self.gripper_delta_z_textbox.text())
+            # Send command to move to this absolute position
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.move_gripper_delta_button.clicked.connect(gripper_calibration_move_gripper_delta)
+        
+        @pyqtSlot()
+        def gripper_calibration_rotate_target():
+            # Get desired rotation angle and pickup z location
+            angle = parse_int(self.gripper_calibration_angle_textbox.text())
+            pickup_x = parse_int(self.gripper_delta_x_textbox.text())
+            pickup_y = parse_int(self.gripper_delta_y_textbox.text())
+            pickup_z = parse_int(self.gripper_calibration_pickup_z_textbox.text())
+            spin_z = parse_int(self.gripper_calibration_spin_z_textbox.text())
+            
+            # Pick up the piece (the gripper calibration target), rotate it, and put it back down
+            self.send_gripper_command(f"r 0", blocking=True) # Set rotation to 0
+            self.pickup_piece(pickup_x, pickup_y, pickup_z, spin_z) # Pick up the target
+            self.send_gripper_command(f"r {angle}", blocking=True) # Rotate the target
+            self.putdown_piece(pickup_x, pickup_y, pickup_z, spin_z) # Put down the target
+            
+            # Finally, move back to the start position to get ready to take the final photo
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            self.send_clearcore_command(f"m {x},{y},{z}")
+        self.gripper_calibration_rotate_button.clicked.connect(gripper_calibration_rotate_target)
+        
+        @pyqtSlot()
+        def take_gripper_calibration_start_photo():
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "start.jpg")
+            self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.gripper_calibration_start_x_textbox.text())
+            y = parse_int(self.gripper_calibration_start_y_textbox.text())
+            z = parse_int(self.gripper_calibration_start_z_textbox.text())
+            self.update_gripper_calibration_info(dict(start_x=x, start_y=y, start_z=z))
+        self.gripper_calibration_take_start_photo_button.clicked.connect(take_gripper_calibration_start_photo)
+        
+        @pyqtSlot()
+        def take_camera_delta_photo():
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "camera_delta.jpg")
+            self.take_photo(destination_photo_path, self.camera_delta_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.camera_delta_x_textbox.text())
+            y = parse_int(self.camera_delta_y_textbox.text())
+            z = parse_int(self.camera_delta_z_textbox.text())
+            self.update_gripper_calibration_info(dict(camera_delta_x=x, camera_delta_y=y, camera_delta_z=z))
+        self.take_camera_delta_photo_button.clicked.connect(take_camera_delta_photo)
+        
+        @pyqtSlot()
+        def take_gripper_delta_photo():
+            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "gripper_delta.jpg")
+            self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
+            # Remember where this photo was taken
+            x = parse_int(self.gripper_delta_x_textbox.text())
+            y = parse_int(self.gripper_delta_y_textbox.text())
+            z = parse_int(self.gripper_delta_z_textbox.text())
+            angle = parse_int(self.gripper_calibration_angle_textbox.text())
+            self.update_gripper_calibration_info(dict(gripper_delta_x=x, gripper_delta_y=y, gripper_delta_z=z, gripper_angle=angle))
+        self.take_gripper_delta_photo_button.clicked.connect(take_gripper_delta_photo)
+        
+        @pyqtSlot()
+        def run_gripper_calibration():
+            # Setup callback to display results
+            @pyqtSlot(list, list)
+            def on_results(motor_counts_per_px, camera_to_gripper_transform):
+                # Remove this callback 
+                self.gripper_calibration.gripper_calibration_results_ready.disconnect(on_results)
+                # Display results
+                self.motor_counts_x_per_px_x_textbox.setText(str(round(motor_counts_per_px[0],4)))
+                self.motor_counts_y_per_px_y_textbox.setText(str(round(motor_counts_per_px[1],4)))
+                self.camera_to_gripper_x_transform_textbox.setText(str(round(camera_to_gripper_transform[0],4)))
+                self.camera_to_gripper_y_transform_textbox.setText(str(round(camera_to_gripper_transform[1],4)))
+            # Add the callback to display results
+            self.gripper_calibration.gripper_calibration_results_ready.connect(on_results)
+            
+            # Trigger the gripper calibration routine
+            gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
+            # gripper_calibration_batch_directory = posixpath.join(
+            #     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
+            #     "3"
+            # )
+            camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+            self.gripper_calibration.trigger_gripper_calibration.emit(
+                gripper_calibration_batch_directory, 
+                camera_matrix, 
+                distortion_coefficients
+            )
+        self.gripper_calibration_run_calibration_button.clicked.connect(run_gripper_calibration)
+        
+        # Start up a thread for the gripper calibration functionality
+        self.gripper_calibration = GripperCalibration(parent=self)
+        self.gripper_calibration.start()
+    
+    def get_gripper_calibration_batch_dir(self):
+        
+        # Get the main gripper calibration directory from the config data
+        photo_directory = self.config.get('gripper_calibration_photo_directory', '')
+        
+        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
+            logging.error(f"[Ui.get_gripper_calibration_batch_dir] Gripper photo directory does not exist at: {photo_directory}")
+            return
+        
+        # If a batch number hasn't been generated, auto-generate the next batch directory (they are numbered sequentially)
+        batch_dir = None
+        batch_number_text = self.gripper_calibration_photo_batch_number_textbox.text().strip()
+        if batch_number_text and batch_number_text.isnumeric():
+            current_batch_number = int(batch_number_text)
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
+        else:
+            last_batch_number = 0
+            sub_dirs = [d for d in os.listdir(photo_directory) if posixpath.isdir(posixpath.join(photo_directory, d))]
+            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
+            batch_dirs.sort(key=int) # sorts in place
+            if batch_dirs:
+                last_batch_number = int(batch_dirs[-1])
+            current_batch_number = last_batch_number + 1
+            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
+            os.makedirs(batch_dir)
+            self.gripper_calibration_photo_batch_number_textbox.setText(str(current_batch_number))
+        
+        # Finally return the batch directory
+        return batch_dir
+    
+    def update_gripper_calibration_info(self, data_dict):
+        gripper_calibration_info_filepath = posixpath.join(
+            self.get_gripper_calibration_batch_dir(), 
+            "gripper_calibration_info.json"
+        )
+
+        # Open up an existing (or create a new) batch JSON file
+        gripper_calibration_info = {}
+        if gripper_calibration_info_filepath and posixpath.exists(gripper_calibration_info_filepath):
+            with open(gripper_calibration_info_filepath, "r") as jsonfile:
+                gripper_calibration_info = json.load(jsonfile)
+        
+        # Add info about the new photo to the batch_info
+        gripper_calibration_info.update(data_dict)
+        
+        # Write the JSON file back to disk
+        with open(gripper_calibration_info_filepath, "w") as jsonfile:
+            json.dump(gripper_calibration_info, jsonfile)
+    
+    def pickup_piece(self, pickup_x, pickup_y, pickup_z, travel_z):
+        """Vacuum on, Lower Z to pickup_z, pick up piece, raise Z to travel_z"""
+        
+        # Vacuum ON
+        self.send_clearcore_command("1", blocking=True, update_position=False)
+        
+        # Lower Z
+        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{pickup_z}", blocking=True, update_position=True)
+
+        # Pause to allow vacuum to form
+        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
+        
+        # Raise Z
+        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{travel_z}", blocking=True, update_position=True)
+
+    def putdown_piece(self, putdown_x, putdown_y, putdown_z, travel_z):
+        """Lower Z to putdown_z, vacuum off, raise Z to travel_z"""
+        # Lower Z
+        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{putdown_z}", blocking=True, update_position=True)
+        
+        # Vacuum OFF
+        self.send_clearcore_command("0", blocking=True, update_position=False)
+        
+        # Pause to allow vacuum to purge
+        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
+        
+        # Raise Z
+        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{travel_z}", blocking=True, update_position=True)
+
+    def take_photo(self, destination_photo_path, label_area):
+        """Take a photo using the Galaxy S24, store it at the specified path, and display it in the label area"""
+        # Determine destination dir and filename from given path
+        destination_photo_dir, destination_photo_filename = posixpath.split(destination_photo_path)
+                
+        # Set up a callback to display the photo once it has been taken
+        @pyqtSlot(str)
+        def on_capture(captured_image_path):
+            # Remove this callback
+            self.camera.photo_captured.disconnect(on_capture)
+            # Rename the file
+            os.rename(captured_image_path, destination_photo_path)
+            # Display the photo
+            self.display_image(destination_photo_path, label_area)
+        self.camera.photo_captured.connect(on_capture)
+        
+        # Trigger the photo to be taken
+        self.camera.trigger_photo.emit(destination_photo_dir)
+        
+    def read_gripper_calibration_config(self):
+        """Update gripper calibration tab input boxes from JSON-formatted config file"""
+        with open(self.config_file_path, "r") as jsonfile:
+            self.config = json.load(jsonfile)
+            self.gripper_calibration_start_x_textbox.setText(self.config.get('gripper_calibration_start_x', ''))
+            self.gripper_calibration_start_y_textbox.setText(self.config.get('gripper_calibration_start_y', ''))
+            self.camera_delta_x_textbox.setText(self.config.get('camera_delta_x', ''))
+            self.camera_delta_y_textbox.setText(self.config.get('camera_delta_y', ''))
+            self.gripper_delta_x_textbox.setText(self.config.get('gripper_delta_x', ''))
+            self.gripper_delta_y_textbox.setText(self.config.get('gripper_delta_y', ''))
+            self.gripper_calibration_angle_textbox.setText(self.config.get('gripper_calibration_angle', ''))
+            self.gripper_calibration_pickup_z_textbox.setText(self.config.get('gripper_calibration_pickup_z', ''))
+            self.gripper_calibration_spin_z_textbox.setText(self.config.get('gripper_calibration_spin_z', ''))
+            self.gripper_calibration_photo_directory_textbox.setText(self.config.get('gripper_calibration_photo_directory',''))
+            self.motor_counts_x_per_px_x_textbox.setText(self.config.get('motor_counts_x_per_px_x', ''))
+            self.motor_counts_y_per_px_y_textbox.setText(self.config.get('motor_counts_y_per_px_y', ''))
+            self.camera_to_gripper_x_transform_textbox.setText(self.config.get('camera_to_gripper_x_transform', ''))
+            self.camera_to_gripper_y_transform_textbox.setText(self.config.get('camera_to_gripper_y_transform', ''))
+    
+    def write_gripper_calibration_config(self):
+        """Update self.config from gripper calibration tab input boxes and write it to a JSON-formatted config file"""
+        # Update self.config from input boxes
+        self.config['gripper_calibration_start_x'] = self.gripper_calibration_start_x_textbox.text()
+        self.config['gripper_calibration_start_y'] = self.gripper_calibration_start_y_textbox.text()
+        self.config['camera_delta_x'] = self.camera_delta_x_textbox.text()
+        self.config['camera_delta_y'] = self.camera_delta_y_textbox.text()
+        self.config['gripper_delta_x'] = self.gripper_delta_x_textbox.text()
+        self.config['gripper_delta_y'] = self.gripper_delta_y_textbox.text()
+        self.config['gripper_calibration_angle'] = self.gripper_calibration_angle_textbox.text()
+        self.config['gripper_calibration_pickup_z'] = self.gripper_calibration_pickup_z_textbox.text()
+        self.config['gripper_calibration_spin_z'] = self.gripper_calibration_spin_z_textbox.text()
+        self.config['gripper_calibration_photo_directory'] = self.gripper_calibration_photo_directory_textbox.text()
+        self.config['motor_counts_x_per_px_x'] = self.motor_counts_x_per_px_x_textbox.text()
+        self.config['motor_counts_y_per_px_y'] = self.motor_counts_y_per_px_y_textbox.text()
+        self.config['camera_to_gripper_x_transform'] = self.camera_to_gripper_x_transform_textbox.text()
+        self.config['camera_to_gripper_y_transform'] = self.camera_to_gripper_y_transform_textbox.text()
+        
+        # Write self.config to a JSON-formatted config file
+        with open(self.config_file_path, "w") as jsonfile:
+            json.dump(self.config, jsonfile)
+
+
+    ################################################################################################
+    ################################################################################################
     # "SERPENTINE PHOTOS" TAB
     ################################################################################################
     ################################################################################################
@@ -805,10 +1432,8 @@ class Ui(QMainWindow):
             self.serpentine_photo_directory_textbox.setText(self.config.get('serpentine_photo_directory', ''))
             self.start_x_textbox.setText(self.config.get('start_x', ''))
             self.start_y_textbox.setText(self.config.get('start_y', ''))
-            self.start_z_textbox.setText(self.config.get('start_z', ''))
             self.end_x_textbox.setText(self.config.get('end_x', ''))
             self.end_y_textbox.setText(self.config.get('end_y', ''))
-            self.end_z_textbox.setText(self.config.get('end_z', ''))
             self.max_step_size_x_textbox.setText(self.config.get('max_step_size_x', ''))
             self.max_step_size_y_textbox.setText(self.config.get('max_step_size_y', ''))
     
@@ -824,514 +1449,6 @@ class Ui(QMainWindow):
         self.config['end_z'] = self.end_z_textbox.text()
         self.config['max_step_size_x'] = self.max_step_size_x_textbox.text()
         self.config['max_step_size_y'] = self.max_step_size_y_textbox.text()
-        
-        # Write self.config to a JSON-formatted config file
-        with open(self.config_file_path, "w") as jsonfile:
-            json.dump(self.config, jsonfile)
-
-    ################################################################################################
-    ################################################################################################
-    # "CAMERA CALIBRATION" TAB
-    ################################################################################################
-    ################################################################################################
-    def setup_camera_calibration_tab(self):
-        """Configure UI on the CAMERA CALIBRATION tab"""
-        # Read the config file and update all textboxes
-        self.read_camera_calibration_config()
-        
-        # Configure all textboxes to auto-save config file upon change
-        self.camera_calibration_checker_rows_spinbox.valueChanged.connect(self.write_camera_calibration_config)
-        self.camera_calibration_checker_columns_spinbox.valueChanged.connect(self.write_camera_calibration_config)
-        self.camera_calibration_checker_width_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_calibration_checker_height_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.pre_camera_calibration_photo_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_calibration_photo_directory_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.post_camera_calibration_photo_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_fx_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_fy_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_cx_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_cy_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_k1_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_k2_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_k3_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_p1_textbox.textChanged.connect(self.write_camera_calibration_config)
-        self.camera_p2_textbox.textChanged.connect(self.write_camera_calibration_config)
-
-        # Configure buttons
-        self.camera_calibration_button.clicked.connect(self.perform_camera_calibration)
-        self.pre_camera_calibration_measure_error_button.clicked.connect(self.measure_pre_camera_calibration_error)
-        self.post_camera_calibration_measure_error_button.clicked.connect(self.measure_post_camera_calibration_error)
-        self.pre_camera_calibration_photo_browse_button.clicked.connect(lambda: self.browse_for_image(self.pre_camera_calibration_photo_textbox, self.pre_camera_calibration_example_photo_label))
-        self.post_camera_calibration_photo_browse_button.clicked.connect(lambda: self.browse_for_image(self.post_camera_calibration_photo_textbox, self.post_camera_calibration_example_photo_label))
-        self.camera_calibration_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.camera_calibration_photo_directory_textbox))
-        
-        # Start up a thread for the camera calibration functionality
-        self.camera_calibration = CameraCalibration(parent=self)
-        self.camera_calibration.start()
-    
-    def measure_checkerboard_error(self, image_path, rms_error_textbox, max_error_textbox, annotated_image_label_area):
-        """Find features in an image, fit lines to the rows and columns, and measure error of that fit"""
-        # Make sure the selected image exists
-        if not image_path or not posixpath.exists(image_path):
-            logger.error(f"[Ui.measure_checkerboard_error] File does not exist at image_path")
-            return
-        
-        # Obtain checkerboard params
-        checker_rows = self.camera_calibration_checker_rows_spinbox.value()
-        checker_columns = self.camera_calibration_checker_columns_spinbox.value()
-        checker_width = float(self.camera_calibration_checker_width_textbox.text())
-        checker_height = float(self.camera_calibration_checker_height_textbox.text())
-        
-        # Set up a callback to report the results
-        @pyqtSlot(float, float, float, float, str)
-        def on_results(average_rms_error_px, max_error_px, average_rms_error_inches, max_error_inches, annotated_image_path):
-            # Remove this callback
-            self.camera_calibration.checkerboard_error_measurements_ready.disconnect(on_results)
-            # Report the results
-            rms_error_textbox.setText(f"{round(average_rms_error_px, 2)} px ({round(average_rms_error_inches, 5)} inches)")
-            max_error_textbox.setText(f"{round(max_error_px, 2)} px ({round(max_error_inches, 5)} inches)")
-            self.display_image(annotated_image_path, annotated_image_label_area)
-        self.camera_calibration.checkerboard_error_measurements_ready.connect(on_results)
-        # Trigger a measurement
-        self.camera_calibration.trigger_checkerboard_error_measurements.emit(
-            image_path, checker_rows, checker_columns, checker_width, checker_height
-        )
-
-    @pyqtSlot()
-    def measure_pre_camera_calibration_error(self):
-        """Take a measurement of the error in an uncalibrated image"""
-        image_path = self.pre_camera_calibration_photo_textbox.text()
-        self.measure_checkerboard_error(
-            image_path, 
-            self.pre_camera_calibration_rms_error_textbox,
-            self.pre_camera_calibration_max_error_textbox,
-            self.pre_camera_calibration_error_visualization_label
-        )
-        
-    def get_camera_intrinsics(self):
-        """Return (camera_matrix, distortion_coefficients) arrays from textbox infos"""
-        # Put together camera matrix and distortion coefficients
-        # [[fx 0  cx]
-        #  [0  fy cy]
-        #  [0  0  1]]
-        camera_matrix = [[0, 0, 0],[0, 0, 0],[0, 0, 1]]
-        camera_matrix[0][0] = float(self.camera_fx_textbox.text() or 0)
-        camera_matrix[1][1] = float(self.camera_fy_textbox.text() or 0)
-        camera_matrix[0][2] = float(self.camera_cx_textbox.text() or 0)
-        camera_matrix[1][2] = float(self.camera_cy_textbox.text() or 0)
-        # Distortion coefficients:
-        distortion_coefficients = [[0, 0, 0, 0, 0]] # [[k1, k2, p1, p2, k3]]
-        distortion_coefficients[0][0] = float(self.camera_k1_textbox.text() or 0)
-        distortion_coefficients[0][1] = float(self.camera_k2_textbox.text() or 0)
-        distortion_coefficients[0][2] = float(self.camera_p1_textbox.text() or 0)
-        distortion_coefficients[0][3] = float(self.camera_p2_textbox.text() or 0)
-        distortion_coefficients[0][4] = float(self.camera_k3_textbox.text() or 0)
-        # Return results
-        return (camera_matrix, distortion_coefficients)
-    
-    @pyqtSlot()
-    def measure_post_camera_calibration_error(self):
-        # Compute source and destination file paths
-        source_image_path = self.post_camera_calibration_photo_textbox.text()
-        path_parts = source_image_path.split(".")
-        destination_image_path = ".".join(path_parts[:-1]) + "-undistorted." + path_parts[-1]
-        
-        # Compute camera intrinsics
-        camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
-        logging.debug(f"[Ui.measure_post_camera_calibration_error] matrix: {camera_matrix}\ndistortion: {distortion_coefficients}")
-        
-        # Setup a callback to report the results
-        @pyqtSlot()
-        def on_results():
-            # Remove this callback
-            self.camera_calibration.undistorted_image_ready.disconnect(on_results)    
-            # Display the undistorted image along with error measurements
-            self.measure_checkerboard_error(
-                destination_image_path, 
-                self.post_camera_calibration_rms_error_textbox,
-                self.post_camera_calibration_max_error_textbox,
-                self.post_camera_calibration_error_visualization_label
-            )
-        # Connect the callback
-        self.camera_calibration.undistorted_image_ready.connect(on_results)
-        
-        # Trigger undistortion process
-        self.camera_calibration.trigger_undistort_image.emit(
-            source_image_path, destination_image_path, camera_matrix, distortion_coefficients
-        )
-
-    @pyqtSlot()
-    def perform_camera_calibration(self):
-        """Perform camera calibration routine"""
-        # Setup a callback to report the results.
-        @pyqtSlot(float, float, list, list)
-        def on_results(rms_rpe, max_error, camera_matrix, distortion_coefficients):
-            # Remove this callback
-            self.camera_calibration.camera_calibration_results_ready.disconnect(on_results)
-            # Camera matrix:
-            # [[fx 0  cx]
-            #  [0  fy cy]
-            #  [0  0  1]]
-            self.camera_fx_textbox.setText(str(round(camera_matrix[0][0],5)))
-            self.camera_fy_textbox.setText(str(round(camera_matrix[1][1],5)))
-            self.camera_cx_textbox.setText(str(round(camera_matrix[0][2],5)))
-            self.camera_cy_textbox.setText(str(round(camera_matrix[1][2],5)))
-            # Distortion coefficients:
-            # [[k1, k2, p1, p2, k3]]
-            self.camera_k1_textbox.setText(str(round(distortion_coefficients[0][0],5)))
-            self.camera_k2_textbox.setText(str(round(distortion_coefficients[0][1],5)))
-            self.camera_p1_textbox.setText(str(round(distortion_coefficients[0][2],5)))
-            self.camera_p2_textbox.setText(str(round(distortion_coefficients[0][3],5)))
-            self.camera_k3_textbox.setText(str(round(distortion_coefficients[0][4],5)))
-            # Report rms and max errors
-            self.camera_calibration_rms_error_textbox.setText(str(round(rms_rpe,5)))
-            self.camera_calibration_max_error_textbox.setText(str(round(max_error,5)))
-        # Add the callback
-        self.camera_calibration.camera_calibration_results_ready.connect(on_results)
-        
-        # Obtain checkerboard params
-        checker_rows = self.camera_calibration_checker_rows_spinbox.value()
-        checker_columns = self.camera_calibration_checker_columns_spinbox.value()
-        checker_width = float(self.camera_calibration_checker_width_textbox.text())
-        checker_height = float(self.camera_calibration_checker_height_textbox.text())
-        
-        # Get camera intrinsics from textboxes
-        camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
-        
-        # Trigger the camera calibration routine
-        photo_directory = self.camera_calibration_photo_directory_textbox.text()
-        self.camera_calibration.trigger_camera_calibration.emit(
-            photo_directory, checker_rows, checker_columns, checker_width, checker_height, camera_matrix, distortion_coefficients
-        )
-    
-    def read_camera_calibration_config(self):
-        """Update camera calibration tab input boxes from JSON-formatted config file"""
-        with open(self.config_file_path, "r") as jsonfile:
-            self.config = json.load(jsonfile)
-            self.camera_calibration_checker_rows_spinbox.setValue(self.config.get('camera_calibration_checker_rows', 0))
-            self.camera_calibration_checker_columns_spinbox.setValue(self.config.get('camera_calibration_checker_columns', 0))
-            self.camera_calibration_checker_width_textbox.setText(self.config.get('camera_calibration_checker_width', '0.0'))
-            self.camera_calibration_checker_height_textbox.setText(self.config.get('camera_calibration_checker_height', '0.0'))
-            self.pre_camera_calibration_photo_textbox.setText(self.config.get('pre_camera_calibration_image', ''))
-            self.camera_calibration_photo_directory_textbox.setText(self.config.get('camera_calibration_photo_directory', ''))
-            self.post_camera_calibration_photo_textbox.setText(self.config.get('post_camera_calibration_image', ''))
-            self.camera_fx_textbox.setText(self.config.get('camera_fx', ''))
-            self.camera_fy_textbox.setText(self.config.get('camera_fy', ''))
-            self.camera_cx_textbox.setText(self.config.get('camera_cx', ''))
-            self.camera_cy_textbox.setText(self.config.get('camera_cy', ''))
-            self.camera_k1_textbox.setText(self.config.get('camera_k1', ''))
-            self.camera_k2_textbox.setText(self.config.get('camera_k2', ''))
-            self.camera_k3_textbox.setText(self.config.get('camera_k3', ''))
-            self.camera_p1_textbox.setText(self.config.get('camera_p1', ''))
-            self.camera_p2_textbox.setText(self.config.get('camera_p2', ''))
-    
-    def write_camera_calibration_config(self):
-        """Update self.config from camera calibration tab input boxes and write it to a JSON-formatted config file"""
-        # Update self.config from input boxes
-        self.config['camera_calibration_checker_rows'] = self.camera_calibration_checker_rows_spinbox.value()
-        self.config['camera_calibration_checker_columns'] = self.camera_calibration_checker_columns_spinbox.value()
-        self.config['camera_calibration_checker_width'] = self.camera_calibration_checker_width_textbox.text()
-        self.config['camera_calibration_checker_height'] = self.camera_calibration_checker_height_textbox.text()
-        self.config['pre_camera_calibration_image'] = self.pre_camera_calibration_photo_textbox.text()
-        self.config['camera_calibration_photo_directory'] = self.camera_calibration_photo_directory_textbox.text()
-        self.config['post_camera_calibration_image'] = self.post_camera_calibration_photo_textbox.text()
-        self.config['camera_fx'] = self.camera_fx_textbox.text()
-        self.config['camera_fy'] = self.camera_fy_textbox.text()
-        self.config['camera_cx'] = self.camera_cx_textbox.text()
-        self.config['camera_cy'] = self.camera_cy_textbox.text()
-        self.config['camera_k1'] = self.camera_k1_textbox.text()
-        self.config['camera_k2'] = self.camera_k2_textbox.text()
-        self.config['camera_k3'] = self.camera_k3_textbox.text()
-        self.config['camera_p1'] = self.camera_p1_textbox.text()
-        self.config['camera_p2'] = self.camera_p2_textbox.text()
-        
-        # Write self.config to a JSON-formatted config file
-        with open(self.config_file_path, "w") as jsonfile:
-            json.dump(self.config, jsonfile)
-            
-            
-    ################################################################################################
-    ################################################################################################
-    # "GRIPPER CALIBRATION" TAB
-    ################################################################################################
-    ################################################################################################
-    def setup_gripper_calibration_tab(self):
-        """Configure UI on the GRIPPER CALIBRATION tab"""
-        
-        # Read the config file and update all textboxes
-        self.read_gripper_calibration_config()
-        
-        # Configure all textboxes to auto-save config file upon change
-        self.gripper_calibration_start_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_calibration_start_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.camera_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.camera_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_delta_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_delta_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_calibration_angle_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_calibration_pickup_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_calibration_spin_z_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.gripper_calibration_photo_directory_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.motor_counts_x_per_px_x_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.motor_counts_y_per_px_y_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.camera_to_gripper_x_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
-        self.camera_to_gripper_y_transform_textbox.textChanged.connect(self.write_gripper_calibration_config)
-
-        # Configure buttons
-        self.gripper_calibration_photo_directory_browse_button.clicked.connect(lambda: self.browse_for_directory(self.gripper_calibration_photo_directory_textbox))
-        
-        @pyqtSlot()
-        def gripper_calibration_move_start():
-            # Get desired position
-            x = parse_int(self.gripper_calibration_start_x_textbox.text())
-            y = parse_int(self.gripper_calibration_start_y_textbox.text())
-            z = parse_int(self.gripper_calibration_start_z_textbox.text())
-            # Send command to move to this absolute position
-            self.send_clearcore_command(f"m {x},{y},{z}")
-        self.gripper_calibration_move_start_button.clicked.connect(gripper_calibration_move_start)
-        
-        @pyqtSlot()
-        def gripper_calibration_move_camera_delta():
-            # Get desired position
-            x = parse_int(self.camera_delta_x_textbox.text())
-            y = parse_int(self.camera_delta_y_textbox.text())
-            z = parse_int(self.camera_delta_z_textbox.text())
-            # Send command to move to this absolute position
-            self.send_clearcore_command(f"m {x},{y},{z}")
-        self.move_camera_delta_button.clicked.connect(gripper_calibration_move_camera_delta)
-        
-        @pyqtSlot()
-        def gripper_calibration_move_gripper_delta():
-            # Get desired position
-            x = parse_int(self.gripper_delta_x_textbox.text())
-            y = parse_int(self.gripper_delta_y_textbox.text())
-            z = parse_int(self.gripper_delta_z_textbox.text())
-            # Send command to move to this absolute position
-            self.send_clearcore_command(f"m {x},{y},{z}")
-        self.move_gripper_delta_button.clicked.connect(gripper_calibration_move_gripper_delta)
-        
-        @pyqtSlot()
-        def gripper_calibration_rotate_target():
-            # Get desired rotation angle and pickup z location
-            angle = parse_int(self.gripper_calibration_angle_textbox.text())
-            pickup_x = parse_int(self.gripper_delta_x_textbox.text())
-            pickup_y = parse_int(self.gripper_delta_y_textbox.text())
-            pickup_z = parse_int(self.gripper_calibration_pickup_z_textbox.text())
-            spin_z = parse_int(self.gripper_calibration_spin_z_textbox.text())
-            
-            # Pick up the piece (the gripper calibration target), rotate it, and put it back down
-            self.send_gripper_command(f"r 0", blocking=True) # Set rotation to 0
-            self.pickup_piece(pickup_x, pickup_y, pickup_z, spin_z) # Pick up the target
-            self.send_gripper_command(f"r {angle}", blocking=True) # Rotate the target
-            self.putdown_piece(pickup_x, pickup_y, pickup_z, spin_z) # Put down the target
-            
-            # Finally, move back to the start position to get ready to take the final photo
-            x = parse_int(self.gripper_calibration_start_x_textbox.text())
-            y = parse_int(self.gripper_calibration_start_y_textbox.text())
-            z = parse_int(self.gripper_calibration_start_z_textbox.text())
-            self.send_clearcore_command(f"m {x},{y},{z}")
-        self.gripper_calibration_rotate_button.clicked.connect(gripper_calibration_rotate_target)
-        
-        @pyqtSlot()
-        def take_gripper_calibration_start_photo():
-            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "start.jpg")
-            self.take_photo(destination_photo_path, self.gripper_calibration_start_photo_label)
-            # Remember where this photo was taken
-            x = parse_int(self.gripper_calibration_start_x_textbox.text())
-            y = parse_int(self.gripper_calibration_start_y_textbox.text())
-            z = parse_int(self.gripper_calibration_start_z_textbox.text())
-            self.update_gripper_calibration_info(dict(start_x=x, start_y=y, start_z=z))
-        self.gripper_calibration_take_start_photo_button.clicked.connect(take_gripper_calibration_start_photo)
-        
-        @pyqtSlot()
-        def take_camera_delta_photo():
-            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "camera_delta.jpg")
-            self.take_photo(destination_photo_path, self.camera_delta_photo_label)
-            # Remember where this photo was taken
-            x = parse_int(self.camera_delta_x_textbox.text())
-            y = parse_int(self.camera_delta_y_textbox.text())
-            z = parse_int(self.camera_delta_z_textbox.text())
-            self.update_gripper_calibration_info(dict(camera_delta_x=x, camera_delta_y=y, camera_delta_z=z))
-        self.take_camera_delta_photo_button.clicked.connect(take_camera_delta_photo)
-        
-        @pyqtSlot()
-        def take_gripper_delta_photo():
-            destination_photo_path = posixpath.join(self.get_gripper_calibration_batch_dir(), "gripper_delta.jpg")
-            self.take_photo(destination_photo_path, self.gripper_delta_photo_label)
-            # Remember where this photo was taken
-            x = parse_int(self.gripper_delta_x_textbox.text())
-            y = parse_int(self.gripper_delta_y_textbox.text())
-            z = parse_int(self.gripper_delta_z_textbox.text())
-            angle = parse_int(self.gripper_calibration_angle_textbox.text())
-            self.update_gripper_calibration_info(dict(gripper_delta_x=x, gripper_delta_y=y, gripper_delta_z=z, gripper_angle=angle))
-        self.take_gripper_delta_photo_button.clicked.connect(take_gripper_delta_photo)
-        
-        @pyqtSlot()
-        def run_gripper_calibration():
-            # Setup callback to display results
-            @pyqtSlot(list, list)
-            def on_results(motor_counts_per_px, camera_to_gripper_transform):
-                # Remove this callback 
-                self.gripper_calibration.gripper_calibration_results_ready.disconnect(on_results)
-                # Display results
-                self.motor_counts_x_per_px_x_textbox.setText(str(round(motor_counts_per_px[0],4)))
-                self.motor_counts_y_per_px_y_textbox.setText(str(round(motor_counts_per_px[1],4)))
-                self.camera_to_gripper_x_transform_textbox.setText(str(round(camera_to_gripper_transform[0],4)))
-                self.camera_to_gripper_y_transform_textbox.setText(str(round(camera_to_gripper_transform[1],4)))
-            # Add the callback to display results
-            self.gripper_calibration.gripper_calibration_results_ready.connect(on_results)
-            
-            # Trigger the gripper calibration routine
-            gripper_calibration_batch_directory = self.get_gripper_calibration_batch_dir()
-            # gripper_calibration_batch_directory = posixpath.join(
-            #     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
-            #     "3"
-            # )
-            camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
-            self.gripper_calibration.trigger_gripper_calibration.emit(
-                gripper_calibration_batch_directory, 
-                camera_matrix, 
-                distortion_coefficients
-            )
-        self.gripper_calibration_run_calibration_button.clicked.connect(run_gripper_calibration)
-        
-        # Start up a thread for the gripper calibration functionality
-        self.gripper_calibration = GripperCalibration(parent=self)
-        self.gripper_calibration.start()
-    
-    def get_gripper_calibration_batch_dir(self):
-        
-        # Get the main gripper calibration directory from the config data
-        photo_directory = self.config.get('gripper_calibration_photo_directory', '')
-        
-        if not photo_directory or not posixpath.exists(photo_directory) or not posixpath.isdir(photo_directory):
-            logging.error(f"[Ui.get_gripper_calibration_batch_dir] Gripper photo directory does not exist at: photo_directory")
-            return
-        
-        # If a batch number hasn't been generated, auto-generate the next batch directory (they are numbered sequentially)
-        batch_dir = None
-        batch_number_text = self.gripper_calibration_photo_batch_number_textbox.text().strip()
-        if batch_number_text and batch_number_text.isnumeric():
-            current_batch_number = int(batch_number_text)
-            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
-        else:
-            last_batch_number = 0
-            sub_dirs = [d for d in os.listdir(photo_directory) if posixpath.isdir(posixpath.join(photo_directory, d))]
-            batch_dirs = [d for d in sub_dirs if d.isnumeric()]
-            batch_dirs.sort(key=int) # sorts in place
-            if batch_dirs:
-                last_batch_number = int(batch_dirs[-1])
-            current_batch_number = last_batch_number + 1
-            batch_dir = posixpath.join(photo_directory, str(current_batch_number))
-            os.makedirs(batch_dir)
-            self.gripper_calibration_photo_batch_number_textbox.setText(str(current_batch_number))
-        
-        # Finally return the batch directory
-        return batch_dir
-    
-    def update_gripper_calibration_info(self, data_dict):
-        gripper_calibration_info_filepath = posixpath.join(
-            self.get_gripper_calibration_batch_dir(), 
-            "gripper_calibration_info.json"
-        )
-
-        # Open up an existing (or create a new) batch JSON file
-        gripper_calibration_info = {}
-        if gripper_calibration_info_filepath and posixpath.exists(gripper_calibration_info_filepath):
-            with open(gripper_calibration_info_filepath, "r") as jsonfile:
-                gripper_calibration_info = json.load(jsonfile)
-        
-        # Add info about the new photo to the batch_info
-        gripper_calibration_info.update(data_dict)
-        
-        # Write the JSON file back to disk
-        with open(gripper_calibration_info_filepath, "w") as jsonfile:
-            json.dump(gripper_calibration_info, jsonfile)
-    
-    def pickup_piece(self, pickup_x, pickup_y, pickup_z, travel_z):
-        """Vacuum on, Lower Z to pickup_z, pick up piece, raise Z to travel_z"""
-        
-        # Vacuum ON
-        self.send_clearcore_command("1", blocking=True, update_position=False)
-        
-        # Lower Z
-        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{pickup_z}", blocking=True, update_position=True)
-
-        # Pause to allow vacuum to form
-        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
-        
-        # Raise Z
-        self.send_clearcore_command(f"m {pickup_x},{pickup_y},{travel_z}", blocking=True, update_position=True)
-
-    def putdown_piece(self, putdown_x, putdown_y, putdown_z, travel_z):
-        """Lower Z to putdown_z, vacuum off, raise Z to travel_z"""
-        # Lower Z
-        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{putdown_z}", blocking=True, update_position=True)
-        
-        # Vacuum OFF
-        self.send_clearcore_command("0", blocking=True, update_position=False)
-        
-        # Pause to allow vacuum to purge
-        QtTest.QTest.qWait(1000) # Delay 1000 ms (using a non-blocking version of sleep)
-        
-        # Raise Z
-        self.send_clearcore_command(f"m {putdown_x},{putdown_y},{travel_z}", blocking=True, update_position=True)
-
-    def take_photo(self, destination_photo_path, label_area):
-        """Take a photo using the Galaxy S24, store it at the specified path, and display it in the label area"""
-        # Determine destination dir and filename from given path
-        destination_photo_dir, destination_photo_filename = posixpath.split(destination_photo_path)
-                
-        # Set up a callback to display the photo once it has been taken
-        @pyqtSlot(str)
-        def on_capture(captured_image_path):
-            # Remove this callback
-            self.camera.photo_captured.disconnect(on_capture)
-            # Rename the file
-            os.rename(captured_image_path, destination_photo_path)
-            # Display the photo
-            self.display_image(destination_photo_path, label_area)
-        self.camera.photo_captured.connect(on_capture)
-        
-        # Trigger the photo to be taken
-        self.camera.trigger_photo.emit(destination_photo_dir)
-        
-    def read_gripper_calibration_config(self):
-        """Update gripper calibration tab input boxes from JSON-formatted config file"""
-        with open(self.config_file_path, "r") as jsonfile:
-            self.config = json.load(jsonfile)
-            self.gripper_calibration_start_x_textbox.setText(self.config.get('gripper_calibration_start_x', ''))
-            self.gripper_calibration_start_y_textbox.setText(self.config.get('gripper_calibration_start_y', ''))
-            self.camera_delta_x_textbox.setText(self.config.get('camera_delta_x', ''))
-            self.camera_delta_y_textbox.setText(self.config.get('camera_delta_y', ''))
-            self.gripper_delta_x_textbox.setText(self.config.get('gripper_delta_x', ''))
-            self.gripper_delta_y_textbox.setText(self.config.get('gripper_delta_y', ''))
-            self.gripper_calibration_angle_textbox.setText(self.config.get('gripper_calibration_angle', ''))
-            self.gripper_calibration_pickup_z_textbox.setText(self.config.get('gripper_calibration_pickup_z', ''))
-            self.gripper_calibration_spin_z_textbox.setText(self.config.get('gripper_calibration_spin_z', ''))
-            self.gripper_calibration_photo_directory_textbox.setText(self.config.get('gripper_calibration_photo_directory',''))
-            self.motor_counts_x_per_px_x_textbox.setText(self.config.get('motor_counts_x_per_px_x', ''))
-            self.motor_counts_y_per_px_y_textbox.setText(self.config.get('motor_counts_y_per_px_y', ''))
-            self.camera_to_gripper_x_transform_textbox.setText(self.config.get('camera_to_gripper_x_transform', ''))
-            self.camera_to_gripper_y_transform_textbox.setText(self.config.get('camera_to_gripper_y_transform', ''))
-    
-    def write_gripper_calibration_config(self):
-        """Update self.config from gripper calibration tab input boxes and write it to a JSON-formatted config file"""
-        # Update self.config from input boxes
-        self.config['gripper_calibration_start_x'] = self.gripper_calibration_start_x_textbox.text()
-        self.config['gripper_calibration_start_y'] = self.gripper_calibration_start_y_textbox.text()
-        self.config['camera_delta_x'] = self.camera_delta_x_textbox.text()
-        self.config['camera_delta_y'] = self.camera_delta_y_textbox.text()
-        self.config['gripper_delta_x'] = self.gripper_delta_x_textbox.text()
-        self.config['gripper_delta_y'] = self.gripper_delta_y_textbox.text()
-        self.config['gripper_calibration_angle'] = self.gripper_calibration_angle_textbox.text()
-        self.config['gripper_calibration_pickup_z'] = self.gripper_calibration_pickup_z_textbox.text()
-        self.config['gripper_calibration_spin_z'] = self.gripper_calibration_spin_z_textbox.text()
-        self.config['gripper_calibration_photo_directory'] = self.gripper_calibration_photo_directory_textbox.text()
-        self.config['motor_counts_x_per_px_x'] = self.motor_counts_x_per_px_x_textbox.text()
-        self.config['motor_counts_y_per_px_y'] = self.motor_counts_y_per_px_y_textbox.text()
-        self.config['camera_to_gripper_x_transform'] = self.camera_to_gripper_x_transform_textbox.text()
-        self.config['camera_to_gripper_y_transform'] = self.camera_to_gripper_y_transform_textbox.text()
         
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:

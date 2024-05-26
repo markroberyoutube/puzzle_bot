@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1362</width>
-    <height>1012</height>
+    <height>1016</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -31,6 +31,12 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
+   <property name="maximumSize">
+    <size>
+     <width>1400</width>
+     <height>1200</height>
+    </size>
+   </property>
    <property name="styleSheet">
     <string notr="true">QPushButton { 
   min-width: 50px; 
@@ -50,6 +56,12 @@ QLineEdit {
       <property name="enabled">
        <bool>true</bool>
       </property>
+      <property name="maximumSize">
+       <size>
+        <width>1200</width>
+        <height>1200</height>
+       </size>
+      </property>
       <property name="autoFillBackground">
        <bool>false</bool>
       </property>
@@ -60,7 +72,7 @@ QLineEdit {
        <enum>QTabWidget::North</enum>
       </property>
       <property name="currentIndex">
-       <number>3</number>
+       <number>4</number>
       </property>
       <property name="elideMode">
        <enum>Qt::ElideRight</enum>
@@ -864,7 +876,7 @@ VISUALIZATION
                   <item row="0" column="0">
                    <widget class="QLabel" name="label_51">
                     <property name="text">
-                     <string>CALIBRATION PHOTO DIRECTORY</string>
+                     <string>CAMERA CALIBRATION PHOTO DIRECTORY</string>
                     </property>
                    </widget>
                   </item>
@@ -1328,6 +1340,505 @@ VISUALIZATION
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tab_calibrate_perspective">
+       <attribute name="title">
+        <string>PERSPECTIVE CALIBRATION</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_32">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_24">
+          <item>
+           <spacer name="horizontalSpacer_22">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QFrame" name="verticalFrame_6">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_29">
+             <item>
+              <widget class="QLabel" name="label_67">
+               <property name="text">
+                <string>START PHOTO POS.</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_26">
+               <item row="1" column="0">
+                <widget class="QLineEdit" name="perspective_calibration_start_x_textbox">
+                 <property name="styleSheet">
+                  <string notr="true">min-width: 75px;
+max-width: 75px;</string>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_73">
+                 <property name="text">
+                  <string>X</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="label_74">
+                 <property name="text">
+                  <string>Y</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QLabel" name="label_75">
+                 <property name="text">
+                  <string>Z</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QLineEdit" name="perspective_calibration_start_z_textbox">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">min-width: 75px;
+max-width: 75px;</string>
+                 </property>
+                 <property name="text">
+                  <string>136000</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="perspective_calibration_start_y_textbox">
+                 <property name="styleSheet">
+                  <string notr="true">min-width: 75px;
+max-width: 75px;</string>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QPushButton" name="perspective_calibration_move_start_button">
+               <property name="text">
+                <string>1. MOVE ABSOLUTE</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_82">
+            <property name="text">
+             <string>Start photo should show 
+all rows and at least 3 
+full columns of the camera
+calibration checkerboard. 
+Most of the target should 
+be off frame to the right. 
+No partial columns should 
+be shown. </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFrame" name="verticalFrame_8">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_30">
+             <item>
+              <widget class="QLabel" name="label_76">
+               <property name="text">
+                <string>END PHOTO X POS.</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_27">
+               <item row="1" column="0">
+                <widget class="QLineEdit" name="perspective_calibration_end_x_textbox">
+                 <property name="styleSheet">
+                  <string notr="true">min-width: 75px;
+max-width: 75px;</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_77">
+                 <property name="text">
+                  <string>X</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QPushButton" name="perspective_calibration_move_end_button">
+               <property name="styleSheet">
+                <string notr="true">min-width: 250px</string>
+               </property>
+               <property name="text">
+                <string>3. MOVE ABSOLUTE</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_83">
+            <property name="text">
+             <string>End photo should show
+the entire checkerboard,
+moved near the left edge of 
+the frame by a movement 
+only of the X motor. This is how
+we find the angle between 
+X motor axis and camera axis.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_29">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_28" stretch="1,6,1">
+          <item>
+           <spacer name="horizontalSpacer_37">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QFrame" name="gridFrame_10">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_28" columnstretch="20,0,0">
+             <item row="1" column="2">
+              <widget class="QLineEdit" name="perspective_calibration_photo_batch_number_textbox">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="text">
+                <string>auto-filled</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QPushButton" name="perspective_calibration_photo_directory_browse_button">
+               <property name="styleSheet">
+                <string notr="true">QPushButton {min-height: 34px; margin-top: 1px}</string>
+               </property>
+               <property name="text">
+                <string>...</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QLabel" name="label_80">
+               <property name="text">
+                <string>BATCH NUMBER</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLineEdit" name="perspective_calibration_photo_directory_textbox">
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_81">
+               <property name="text">
+                <string>PERSPECTIVE CALIBRATION PHOTO DIRECTORY</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_38">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_29">
+          <item>
+           <spacer name="horizontalSpacer_39">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout_7">
+            <item row="1" column="0">
+             <widget class="QLabel" name="gripper_calibration_start_photo_label_3">
+              <property name="minimumSize">
+               <size>
+                <width>284</width>
+                <height>214</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>284</width>
+                <height>214</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: 1px solid black;
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
+              <property name="text">
+               <string>Start Photo Appears Here</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QPushButton" name="perspective_calibration_take_end_photo_button">
+              <property name="text">
+               <string>4. TAKE END PHOTO</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="camera_delta_photo_label_3">
+              <property name="minimumSize">
+               <size>
+                <width>284</width>
+                <height>214</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>284</width>
+                <height>214</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: 1px solid black;
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
+              <property name="text">
+               <string>End Photo Appears Here</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QPushButton" name="perspective_calibration_take_start_photo_button">
+              <property name="text">
+               <string>2. TAKE START PHOTO</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_40">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_31">
+          <item>
+           <spacer name="horizontalSpacer_43">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QToolButton" name="perspective_calibration_run_calibration_button">
+            <property name="styleSheet">
+             <string notr="true">min-height: 95px;
+min-width: 95px;	</string>
+            </property>
+            <property name="text">
+             <string>CALIBRATE
+ANGLE ▶️</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFrame" name="verticalFrame_9">
+            <property name="frameShape">
+             <enum>QFrame::Box</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_31">
+             <item>
+              <widget class="QLabel" name="label_84">
+               <property name="text">
+                <string>ROTATION ANGLE</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_34">
+               <item row="1" column="0">
+                <widget class="QLineEdit" name="perspective_rotation_angle_textbox">
+                 <property name="styleSheet">
+                  <string notr="true">min-width: 125px;
+max-width: 125px;</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_85">
+                 <property name="text">
+                  <string>ANGLE (DEGREES)</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_44">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_14">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tab_calibrate_gripper">
        <attribute name="title">
         <string>GRIPPER CALIBRATION</string>
@@ -1787,7 +2298,7 @@ max-width: 75px;</string>
              <item row="0" column="0">
               <widget class="QLabel" name="label_71">
                <property name="text">
-                <string>CALIBRATION PHOTO DIRECTORY</string>
+                <string>GRIPPER CALIBRATION PHOTO DIRECTORY</string>
                </property>
               </widget>
              </item>
@@ -1837,16 +2348,16 @@ max-width: 75px;</string>
              <widget class="QLabel" name="camera_delta_photo_label">
               <property name="styleSheet">
                <string notr="true">border: 1px solid black;
-min-width: 300px;
-max-width: 300px;
-min-height: 400px;
-max-height: 400px;</string>
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::NoFrame</enum>
               </property>
               <property name="text">
-               <string>Prior Photo Appears Here</string>
+               <string>Camera Delta Photo Appears Here</string>
               </property>
              </widget>
             </item>
@@ -1861,16 +2372,16 @@ max-height: 400px;</string>
              <widget class="QLabel" name="gripper_calibration_start_photo_label">
               <property name="styleSheet">
                <string notr="true">border: 1px solid black;
-min-width: 300px;
-max-width: 300px;
-min-height: 400px;
-max-height: 400px;</string>
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::NoFrame</enum>
               </property>
               <property name="text">
-               <string>Prior Photo Appears Here</string>
+               <string>Start Photo Appears Here</string>
               </property>
              </widget>
             </item>
@@ -1878,16 +2389,16 @@ max-height: 400px;</string>
              <widget class="QLabel" name="gripper_delta_photo_label">
               <property name="styleSheet">
                <string notr="true">border: 1px solid black;
-min-width: 300px;
-max-width: 300px;
-min-height: 400px;
-max-height: 400px;</string>
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::NoFrame</enum>
               </property>
               <property name="text">
-               <string>Prior Photo Appears Here</string>
+               <string>Gripper Delta Photo Appears Here</string>
               </property>
              </widget>
             </item>
@@ -2075,6 +2586,19 @@ max-width: 125px;</string>
           </item>
          </layout>
         </item>
+        <item>
+         <spacer name="verticalSpacer_15">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
        </layout>
       </widget>
       <widget class="QWidget" name="tab_serpentine_photos">
@@ -2148,7 +2672,7 @@ max-width: 125px;</string>
                <item row="0" column="0">
                 <widget class="QLabel" name="label_23">
                  <property name="text">
-                  <string>PHOTO DIRECTORY</string>
+                  <string>SERPENTINE PHOTO DIRECTORY</string>
                  </property>
                 </widget>
                </item>
@@ -2771,7 +3295,7 @@ SOLUTION ▶️</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>41</height>
+            <height>54</height>
            </size>
           </property>
          </spacer>
@@ -2858,7 +3382,7 @@ min-width: 150px;</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>40</height>
+            <height>55</height>
            </size>
           </property>
          </spacer>
@@ -2945,7 +3469,7 @@ min-width: 150px;</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>41</height>
+            <height>54</height>
            </size>
           </property>
          </spacer>
@@ -2957,19 +3481,6 @@ min-width: 150px;</string>
    </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>1362</width>
-     <height>37</height>
-    </rect>
-   </property>
-   <property name="nativeMenuBar">
-    <bool>true</bool>
-   </property>
-  </widget>
   <action name="actionSave_As">
    <property name="text">
     <string>Save As</string>
