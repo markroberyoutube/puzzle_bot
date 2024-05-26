@@ -739,6 +739,15 @@ class Ui(QMainWindow):
         # Read the config file and update all textboxes
         self.read_perspective_calibration_config()
         
+        # Configure all textboxes to auto-save to config file
+        self.perspective_calibration_start_x_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_calibration_start_y_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_calibration_end_x_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_calibration_photo_directory_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_rotation_angle_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_starting_quad_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        self.perspective_corrected_quad_textbox.textChanged.connect(self.write_perspective_calibration_config)
+        
         # Configure buttons
         self.perspective_calibration_photo_directory_browse_button.clicked.connect(
             lambda: self.browse_for_directory(self.perspective_calibration_photo_directory_textbox)
