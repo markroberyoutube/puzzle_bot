@@ -1359,9 +1359,20 @@ class Ui(QMainWindow):
                 while not self.photo_capture_finished:
                     QtTest.QTest.qWait(100) # Delay 100 ms using a non-blocking version of sleep
                 
-                # Rotate and undistort the image and save it in the Solver dir
+                # Rotate and undistort the image 
                 camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
                 img = open_image_undistorted_and_rotated(self.last_serpentine_image_path, camera_matrix, distortion_coefficients)
+                
+                # Find perspective corrections
+                perspective_angle, perspective_starting_quad, perspective_corrected_quad = self.get_perspective_corrections()
+                
+                # Correct the perspective of the image
+                img = correct_perspective(img, perspective_starting_quad, perspective_corrected_quad, crop=True)
+
+                # Rotate the images so the image X axis is paralle with the motor X axis
+                img = rotate_image(img, perspective_angle, crop=True)
+                
+                # Save the resulting image in the Solver dir
                 solver_filename = posixpath.basename(self.last_serpentine_image_path)
                 solver_img_path = posixpath.join(self.solver_batch_photos_dir, solver_filename)
                 cv.imwrite(solver_img_path, img)
