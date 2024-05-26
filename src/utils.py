@@ -15,11 +15,41 @@ BOTTOM_CROP_PIXELS = 11
 RIGHT_CROP_PIXELS = 19 # Was 9
 TOP_CROP_PIXELS = 13 # Was 11
 
+def get_point_on_line(line, distance):
+    """Find a point on a line segment at a given distance from the initial point."""
+    initial_point, terminal_point = line
+    v = np.array(initial_point, dtype=float)
+    u = np.array(terminal_point, dtype=float)
+    n = v - u
+    n /= np.linalg.norm(n, 2)
+    point = v - distance * n
+    return tuple(point)
+
+def sort_corners(corners):
+    """Because cv.findChessboardCornersSB does not return the corners in a consistent order, we need to
+       reorder the corners so that the starting corner is in a consistent place (we'll pick the lower left 
+       corner as our starting corner)."""
+    # See if we need to flip the column order
+    row_0_start_x, row_0_start_y = corners[0][0]
+    row_0_end_x, row_0_end_y = corners[0][-1]
+    if row_0_start_x > row_0_end_x:
+        # Reverse the column order
+        corners = np.fliplr(corners)
+        
+    # See if we need to flip the row order
+    col_0_start_x, col_0_start_y = corners[0][0]
+    col_0_end_x, col_0_end_y = corners[-1][0]
+    if col_0_start_y < col_0_end_y:
+        # Reverse the row order
+        corners = np.flipud(corners)
+
+    # Return the results
+    return corners
+
 def manhattan_distance(point1, point2):
     x1,y1 = point1
     x2,y2 = point2
     return abs(x2-x1) + abs(y2-y1)
-    
     
 def spiral_order(pieces):
     """Returns the pieces in 'spiral' order, starting at the origin and extending out in a clockwise spiral."""
@@ -57,8 +87,6 @@ def spiral_order(pieces):
         pieces_in_lexical_order = np.rot90(pieces_in_lexical_order) 
         
     return pieces_in_spiral_order
-
-    
     
 def anchor_order(pieces):
     """Returns the pieces in 'anchor' order, starting at the origin and extending out in a triangular fashion."""
