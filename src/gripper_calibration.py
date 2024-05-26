@@ -22,7 +22,7 @@ class GripperCalibration(QThread):
     """
     
     # Define QT Signals for inter-process communication
-    trigger_gripper_calibration = pyqtSignal(str, list, list)
+    trigger_gripper_calibration = pyqtSignal(str, list, list, float, list, list)
     gripper_calibration_results_ready = pyqtSignal(list, list)
     
     thread_closing = pyqtSignal() # Emit to this when you want the thread to exit
@@ -142,11 +142,14 @@ class GripperCalibration(QThread):
     
         return corners, masked_img
 
-    @pyqtSlot(str, list, list)
+    @pyqtSlot(str, list, list, float, list, list)
     def calibrate_gripper(self,
         gripper_calibration_batch_directory, 
         camera_matrix, 
-        distortion_coefficients):
+        distortion_coefficients,
+        perspective_angle,
+        perspective_starting_quad,
+        perspective_corrected_quad):
 
         # Set to True if you want to see a lot of imview windows pop up
         debug = False
@@ -178,6 +181,16 @@ class GripperCalibration(QThread):
         start_img = open_image_undistorted_and_rotated(start_image_path, camera_matrix, distortion_coefficients)
         camera_delta_img = open_image_undistorted_and_rotated(camera_delta_image_path, camera_matrix, distortion_coefficients)
         gripper_delta_img = open_image_undistorted_and_rotated(gripper_delta_image_path, camera_matrix, distortion_coefficients)
+
+        # Correct the perspective of the images
+        start_img = correct_perspective(start_img, perspective_starting_quad, perspective_corrected_quad, crop=True)
+        camera_delta_img = correct_perspective(camera_delta_img, perspective_starting_quad, perspective_corrected_quad, crop=True)
+        gripper_delta_img = correct_perspective(gripper_delta_img, perspective_starting_quad, perspective_corrected_quad, crop=True)
+
+        # Rotate the images so the image X axis is paralle with the motor X axis
+        start_img = rotate_image(start_img, perspective_angle, crop=True)
+        camera_delta_img = rotate_image(camera_delta_img, perspective_angle, crop=True)
+        gripper_delta_img = rotate_image(gripper_delta_img, perspective_angle, crop=True)
 
         # Find the chessboards
         start_chessboard, masked_start_img = self.find_chessboard(start_img)

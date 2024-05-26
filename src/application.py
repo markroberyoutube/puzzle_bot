@@ -21,6 +21,7 @@ from camera_driver import GalaxyS24
 from camera_calibration import CameraCalibration
 from gripper_calibration import GripperCalibration, ROTATION_MOTOR_COUNTS_PER_DEGREE
 from puzzle_solver import PuzzleSolver
+from perspective_calibration import rotate_image, calibrate_rotation, correct_perspective, calibrate_perspective
 
 # Add Ryan's code to our path
 sys.path.append(
@@ -40,7 +41,7 @@ CAMERA_Z = 136000
 
 INPUT_IMAGE_WIDTH = 4000
 
-APPLICATION_NAME = "Puzzlin' Pete"
+APPLICATION_NAME = "JIGSAW 🧩"
 
 # QT Class inheritance code from
 # https://nitratine.net/blog/post/how-to-import-a-pyqt5-ui-file-in-a-python-gui/
@@ -768,9 +769,7 @@ class Ui(QMainWindow):
             destination_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "start.jpg")
             self.take_photo(
                 destination_photo_path, 
-                self.perspective_calibration_start_photo_label,
-                correct_distortion=True,
-                correct_rotation=False
+                self.perspective_calibration_start_photo_label
             )
         self.perspective_calibration_take_start_photo_button.clicked.connect(take_perspective_calibration_start_photo)
         
@@ -779,15 +778,54 @@ class Ui(QMainWindow):
             destination_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "end.jpg")
             self.take_photo(
                 destination_photo_path, 
-                self.perspective_calibration_end_photo_label,
-                correct_distortion=True,
-                correct_rotation=False
+                self.perspective_calibration_end_photo_label
             )
         self.perspective_calibration_take_end_photo_button.clicked.connect(take_perspective_calibration_end_photo)
         
-
-        self.perspective_calibration_run_calibration_button.clicked.connect(???)
-
+        @pyqtSlot()
+        def run_perspective_calibration():
+            start_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "start.jpg")
+            end_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "end.jpg")
+            camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+            
+            # Open and undistort the images
+            start_img = open_image_undistorted_and_rotated(start_photo_path, camera_matrix, distortion_coefficients)
+            end_img = open_image_undistorted_and_rotated(end_photo_path, camera_matrix, distortion_coefficients)
+            
+            # Specify the checkerboard size
+            checker_rows = self.camera_calibration_checker_rows_spinbox.value()
+            checker_columns = self.camera_calibration_checker_columns_spinbox.value()
+            
+            # Calculate the two quads needed to correct perspective
+            starting_quad, corrected_quad = calibrate_perspective(end_img, checker_columns, checker_rows)
+    
+            # Correct the perspective of both images
+            start_img = correct_perspective(start_img, starting_quad, corrected_quad, crop=True)
+            end_img = correct_perspective(end_img, starting_quad, corrected_quad, crop=True)
+    
+            # Calculate the rotation needed to make the image X axis parallel to the motor X axis
+            angle_degrees = calibrate_rotation(start_img, end_img)
+    
+            # Rotate and crop the images
+            start_img = rotate_image(start_img, angle_degrees, crop=True)
+            end_img = rotate_image(end_img, angle_degrees, crop=True)
+    
+            # Write the final images to disk
+            calibrated_start_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "start_calibrated.jpg")
+            calibrated_end_photo_path = posixpath.join(self.get_perspective_calibration_batch_dir(), "end_calibrated.jpg")
+            cv.imwrite(calibrated_start_photo_path, start_img)
+            cv.imwrite(calibrated_end_photo_path, end_img)
+            
+            # Update textboxes
+            self.perspective_rotation_angle_textbox.setText(str(angle_degrees))
+            self.perspective_starting_quad_textbox.setText(str(starting_quad.tolist()))
+            self.perspective_corrected_quad_textbox.setText(str(corrected_quad.tolist()))
+            
+            # Show the resulting end photo in the calibrated label area
+            self.display_image(calibrated_end_photo_path, self.perspective_calibration_corrected_end_photo_label)
+            
+        # Connect the button action
+        self.perspective_calibration_run_calibration_button.clicked.connect(run_perspective_calibration)
 
     def get_perspective_calibration_batch_dir(self):
         # Get the main perspective calibration directory from the config data
@@ -818,6 +856,13 @@ class Ui(QMainWindow):
         # Finally return the batch directory
         return batch_dir
 
+    def get_perspective_corrections(self):        
+        # Return the following data from textboxes
+        perspective_angle = float(self.perspective_rotation_angle_textbox.text())
+        perspective_starting_quad = eval(self.perspective_starting_quad_textbox.text())
+        perspective_corrected_quad = eval(self.perspective_corrected_quad_textbox.text())
+        return perspective_angle, perspective_starting_quad, perspective_corrected_quad
+
     def read_perspective_calibration_config(self):
         """Update camera calibration tab input boxes from JSON-formatted config file"""
         with open(self.config_file_path, "r") as jsonfile:
@@ -827,6 +872,8 @@ class Ui(QMainWindow):
             self.perspective_calibration_end_x_textbox.setText(self.config.get('perspective_calibration_end_x', ''))
             self.perspective_calibration_photo_directory_textbox.setText(self.config.get('perspective_calibration_photo_directory',''))
             self.perspective_rotation_angle_textbox.setText(self.config.get('perspective_rotation_angle',''))
+            self.perspective_starting_quad_textbox.setText(self.config.get('perspective_starting_quad',''))
+            self.perspective_corrected_quad_textbox.setText(self.config.get('perspective_corrected_quad',''))
                 
     def write_perspective_calibration_config(self):
         """Update self.config from camera calibration tab input boxes and write it to a JSON-formatted config file"""
@@ -836,7 +883,9 @@ class Ui(QMainWindow):
         self.config['perspective_calibration_end_x'] = self.perspective_calibration_end_x_textbox.text()
         self.config['perspective_calibration_photo_directory'] = self.perspective_calibration_photo_directory_textbox.text()
         self.config['perspective_rotation_angle'] = self.perspective_rotation_angle_textbox.text()
-        
+        self.config['perspective_starting_quad'] = self.perspective_starting_quad_textbox.text()
+        self.config['perspective_corrected_quad'] = self.perspective_corrected_quad_textbox.text()
+
         # Write self.config to a JSON-formatted config file
         with open(self.config_file_path, "w") as jsonfile:
             json.dump(self.config, jsonfile)
@@ -980,11 +1029,20 @@ class Ui(QMainWindow):
             #     "/Users/iancharnas/Google Drive/Crunchlabs Projects/2024 - Puzzle Robot/CODE/GRIPPER_CALIBRATION_PHOTOS",
             #     "3"
             # )
+            
+            # Find camera intrinsics
             camera_matrix, distortion_coefficients = self.get_camera_intrinsics()
+            
+            # Find perspective corrections
+            perspective_angle, perspective_starting_quad, perspective_corrected_quad = self.get_perspective_corrections()
+            
             self.gripper_calibration.trigger_gripper_calibration.emit(
                 gripper_calibration_batch_directory, 
                 camera_matrix, 
-                distortion_coefficients
+                distortion_coefficients,
+                perspective_angle,
+                perspective_starting_quad,
+                perspective_corrected_quad
             )
         self.gripper_calibration_run_calibration_button.clicked.connect(run_gripper_calibration)
         
