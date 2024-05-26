@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1362</width>
-    <height>1016</height>
+    <height>979</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -72,7 +72,7 @@ QLineEdit {
        <enum>QTabWidget::North</enum>
       </property>
       <property name="currentIndex">
-       <number>4</number>
+       <number>2</number>
       </property>
       <property name="elideMode">
        <enum>Qt::ElideRight</enum>
@@ -1759,12 +1759,12 @@ max-height: 212px;</string>
           <item>
            <widget class="QToolButton" name="perspective_calibration_run_calibration_button">
             <property name="styleSheet">
-             <string notr="true">min-height: 95px;
-min-width: 95px;	</string>
+             <string notr="true">min-height: 212px;
+min-width: 150px;	</string>
             </property>
             <property name="text">
-             <string>CALIBRATE
-ANGLE ▶️</string>
+             <string>5. CALIBRATE
+PERSPECTIVE ▶️</string>
             </property>
            </widget>
           </item>
@@ -1778,14 +1778,23 @@ ANGLE ▶️</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_31">
              <item>
-              <widget class="QLabel" name="label_84">
-               <property name="text">
-                <string>ROTATION ANGLE</string>
-               </property>
-              </widget>
-             </item>
-             <item>
               <layout class="QGridLayout" name="gridLayout_34">
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_85">
+                 <property name="text">
+                  <string>ROTATION
+DEGREES</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="label_78">
+                 <property name="text">
+                  <string>STARTING
+QUAD</string>
+                 </property>
+                </widget>
+               </item>
                <item row="1" column="0">
                 <widget class="QLineEdit" name="perspective_rotation_angle_textbox">
                  <property name="styleSheet">
@@ -1797,16 +1806,52 @@ max-width: 125px;</string>
                  </property>
                 </widget>
                </item>
-               <item row="0" column="0">
-                <widget class="QLabel" name="label_85">
+               <item row="0" column="2">
+                <widget class="QLabel" name="label_79">
                  <property name="text">
-                  <string>ANGLE (DEGREES)</string>
+                  <string>CORRECTED
+QUAD</string>
                  </property>
                 </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="perspective_starting_quad_textbox"/>
+               </item>
+               <item row="1" column="2">
+                <widget class="QLineEdit" name="perspective_corrected_quad_textbox"/>
                </item>
               </layout>
              </item>
             </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="camera_delta_photo_label_5">
+            <property name="minimumSize">
+             <size>
+              <width>284</width>
+              <height>214</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>284</width>
+              <height>214</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">border: 1px solid black;
+min-width: 282px;
+max-width: 282px;
+min-height: 212px;
+max-height: 212px;</string>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <property name="text">
+             <string>Corrected End Photo Appears Here</string>
+            </property>
            </widget>
           </item>
           <item>
@@ -2448,7 +2493,7 @@ max-height: 212px;</string>
 min-width: 95px;	</string>
             </property>
             <property name="text">
-             <string>CALIBRATE
+             <string>8. CALIBRATE
 ALL ▶️</string>
             </property>
            </widget>
@@ -3295,7 +3340,7 @@ SOLUTION ▶️</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>54</height>
+            <height>42</height>
            </size>
           </property>
          </spacer>
@@ -3382,7 +3427,7 @@ min-width: 150px;</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>55</height>
+            <height>42</height>
            </size>
           </property>
          </spacer>
@@ -3469,7 +3514,7 @@ min-width: 150px;</string>
           <property name="sizeHint" stdset="0">
            <size>
             <width>20</width>
-            <height>54</height>
+            <height>42</height>
            </size>
           </property>
          </spacer>
