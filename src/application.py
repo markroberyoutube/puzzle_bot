@@ -868,8 +868,8 @@ class Ui(QMainWindow):
     def get_perspective_corrections(self):        
         # Return the following data from textboxes
         perspective_angle = float(self.perspective_rotation_angle_textbox.text())
-        perspective_starting_quad = eval(self.perspective_starting_quad_textbox.text())
-        perspective_corrected_quad = eval(self.perspective_corrected_quad_textbox.text())
+        perspective_starting_quad = np.float32(eval(self.perspective_starting_quad_textbox.text()))
+        perspective_corrected_quad = np.float32(eval(self.perspective_corrected_quad_textbox.text()))
         return perspective_angle, perspective_starting_quad, perspective_corrected_quad
 
     def read_perspective_calibration_config(self):
