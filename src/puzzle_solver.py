@@ -11,7 +11,7 @@ from utils import estimate_linear_regression_coefficients
 sys.path.append(
     posixpath.join(posixpath.pardir, "solver_library", "src")
 )
-import process, solve
+import process, solve, run_batch
 from common import util
 from common.config import *
 
@@ -64,10 +64,7 @@ class PuzzleSolver(QThread):
         
         # Prepare working directories
         working_dir = solver_batch_working_dir
-        for d in [PHOTO_BMP_DIR, SEGMENT_DIR, VECTOR_DIR, DEDUPED_DIR, CONNECTIVITY_DIR, SOLUTION_DIR]:
-            os.makedirs(posixpath.join(working_dir, d), exist_ok=True)
-            for f in os.listdir(posixpath.join(working_dir, d)):
-                os.remove(posixpath.join(working_dir, d, f))
+        run_batch._prepare_new_run(solver_batch_working_dir, 0, 10)
         
         # Open batch info (prepared by the serpentine photo thread)
         input_dir = posixpath.join(working_dir, PHOTOS_DIR)
@@ -78,32 +75,18 @@ class PuzzleSolver(QThread):
             return
         with open(batch_info_file, "r") as jsonfile:
             batch_info = json.load(jsonfile)
-                
-        # Process the photos one by one
-        piece_id = 1
-        for f in os.listdir(input_dir):
-            # Handle thread exit in this long running process.
-            if self._thread_exiting: return
-            # Process the photo
-            if f.endswith('.jpg') or f.endswith('.jpeg'):
-                print(f"{util.YELLOW}### Processing {f} ###{util.WHITE}")
+            
+        # Prepare robot states (from batch_info) in the format Ryan's code wants
+        robot_states = {}
+        for d in batch_info:
+            robot_states[d["file_name"]] = d["position"]
 
-                # Find the motor position this photo was taken at
-                photo_info = [p for p in batch_info['photos'] if p['file_name'] == f][0]
-                robot_state = {'photo_at_motor_position': photo_info['position']}
-                
-                QApplication.processEvents()
+        # Batch process all of the photos
+        process.batch_process_photos(path=working_dir, serialize=False, robot_states=robot_states, id=None, start_at_step=0, stop_before_step=10)
 
-                # Process the photo
-                piece_id = process.process_photo(
-                    photo_path = posixpath.join(input_dir, f),
-                    working_dir = working_dir,
-                    starting_piece_id = piece_id,
-                    robot_state = robot_state
-                )
-
-        print("Solving")
-        solve.solve(path=working_dir)
+        # Solve the puzzle
+        print("SOLVING...")
+        solve.solve(path=working_dir, start_at=0)
         
         # Put the original stdout back in place
         sys.stdout.write = self.old_write
