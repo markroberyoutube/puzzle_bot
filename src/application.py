@@ -34,8 +34,8 @@ from common.config import *
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
 SAFE_TRAVEL_Z = 30000
-DROPOFF_Z = 9000
-PICKUP_Z = 9000
+DROPOFF_Z = 8000
+PICKUP_Z = 8000
 
 CAMERA_Z = 136000
 
@@ -1050,8 +1050,8 @@ class Ui(QMainWindow):
                 camera_matrix, 
                 distortion_coefficients,
                 perspective_angle,
-                perspective_starting_quad,
-                perspective_corrected_quad
+                perspective_starting_quad.tolist(),
+                perspective_corrected_quad.tolist()
             )
         self.gripper_calibration_run_calibration_button.clicked.connect(run_gripper_calibration)
         
@@ -1645,7 +1645,7 @@ class Ui(QMainWindow):
         self.set_gripper_availability(False)
         
         # Determine scale factor that was used to shrink the images. Will be used to scale the solution
-        scale_factor = BMP_WIDTH / INPUT_IMAGE_WIDTH
+        scale_factor = SCALE_BMP_TO_WIDTH / INPUT_IMAGE_WIDTH if SCALE_BMP_TO_WIDTH else 1.0
         
         # Find the most recent batch directory
         solver_dir = self.solver_directory_textbox.text()
