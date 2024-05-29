@@ -78,7 +78,7 @@ class PuzzleSolver(QThread):
             
         # Prepare robot states (from batch_info) in the format Ryan's code wants
         robot_states = {}
-        for d in batch_info:
+        for d in batch_info["photos"]:
             robot_states[d["file_name"]] = d["position"]
 
         # Batch process all of the photos
