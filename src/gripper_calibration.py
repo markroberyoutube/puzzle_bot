@@ -5,6 +5,7 @@ import json
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QThread
 
 from utils import minimum_distance, get_escape_points, get_intersect, order_rectangle_corners, open_image_undistorted_and_rotated
+from perspective_calibration import correct_perspective, rotate_image
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -80,7 +81,8 @@ class GripperCalibration(QThread):
         if debug: cv.imshow('sharpen', sharpen_img)
     
         # Threshold to a binary image
-        thresh_img = cv.threshold(sharpen_img, 200, 255, cv.THRESH_BINARY)[1]
+        THRESHOLD = 100 # ICC changed from 200
+        thresh_img = cv.threshold(sharpen_img, 100, 255, cv.THRESH_BINARY)[1]
         if debug: cv.imshow('thresh', thresh_img)
     
         # Morph close to eliminate sharpening noise
@@ -153,6 +155,10 @@ class GripperCalibration(QThread):
 
         # Set to True if you want to see a lot of imview windows pop up
         debug = False
+
+        # Convert the quads to numpy arrays
+        perspective_starting_quad = np.float32(perspective_starting_quad)
+        perspective_corrected_quad = np.float32(perspective_corrected_quad)
 
         # Define data input paths
         batch_dir = gripper_calibration_batch_directory
