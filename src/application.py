@@ -33,7 +33,7 @@ from common.config import *
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
-SAFE_TRAVEL_Z = 30000
+SAFE_TRAVEL_Z = 15000 # ICC Was 30000
 DROPOFF_Z = 8000
 PICKUP_Z = 8000
 
@@ -1238,6 +1238,20 @@ class Ui(QMainWindow):
     def take_serpentine_photos(self):
         """Take photos in a serpentine path given the config parameters"""
         
+        # Create a dict to store metadata such as robot position, 
+        # which will be written to a JSON file after all photos have been taken
+        self.serpentine_photo_batch_info = {}
+        
+        # Ensure runtime parameters will be saved in the JSON file
+        self.serpentine_photo_batch_info['start_x'] = self.start_x_textbox.text()
+        self.serpentine_photo_batch_info['start_y'] = self.start_y_textbox.text()
+        self.serpentine_photo_batch_info['start_z'] = self.start_z_textbox.text()
+        self.serpentine_photo_batch_info['end_x'] = self.end_x_textbox.text()
+        self.serpentine_photo_batch_info['end_y'] = self.end_y_textbox.text()
+        self.serpentine_photo_batch_info['end_z'] = self.end_z_textbox.text()
+        self.serpentine_photo_batch_info['max_step_size_x'] = self.max_step_size_x_textbox.text()
+        self.serpentine_photo_batch_info['max_step_size_y'] = self.max_step_size_y_textbox.text()
+        
         # Change the "START" button to "PAUSE"
         start_text = self.serpentine_start_button.text() 
         pause_text = "PAUSE ⏸️"
@@ -1383,8 +1397,16 @@ class Ui(QMainWindow):
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
         
-        # After all photos have been taken, copy the batch_info.json file into the solver batch dir
+        # After all photos have been taken, write the batch info to file and 
+        # copy the batch_info.json file into the solver batch dir
         batch_info_file = posixpath.join(batch_dir, "batch.json")
+        
+        # Write the JSON file to disk
+        with open(batch_info_file, "w") as jsonfile:
+            json.dump(self.serpentine_photo_batch_info, jsonfile)
+            self.serpentine_photo_batch_info
+        
+        # Copy it to the solver batch dir
         destination_file = posixpath.join(self.solver_batch_photos_dir, "batch.json")
         shutil.copyfile(batch_info_file, destination_file)
         
@@ -1394,7 +1416,7 @@ class Ui(QMainWindow):
         self.serpentine_start_button.setText(start_text)
         
         # Set status bar message
-        self.statusBar().showMessage("Finished taking serpentine photos!")
+        self.statusBar().showMessage("Finished taking and processing serpentine photos!")
 
     def take_screenshot(self):
         """Take a screenshot from the Galaxy S24 and display it"""
@@ -1452,35 +1474,13 @@ class Ui(QMainWindow):
     def save_serpentine_photo_info(self, image_path, position, batch_dir):
         """Save the position and path info to the batch JSON file"""
         
-        # Open up an existing (or create a new) batch JSON file
-        batch_info_file = posixpath.join(batch_dir, "batch.json")
-        batch_info = {}
-        if batch_info_file and posixpath.exists(batch_info_file):
-            with open(batch_info_file, "r") as jsonfile:
-                batch_info = json.load(jsonfile)
-        
-        # Add info about the new photo to the batch_info
-        if batch_info.get('photos', None) is None:
-            batch_info['photos'] = []
+        # Add info about the new photo to the metadata batch_info dict
+        if self.serpentine_photo_batch_info.get('photos', None) is None:
+            self.serpentine_photo_batch_info['photos'] = []
         file_name = posixpath.split(image_path)[-1]
-        batch_info['photos'].append(
+        self.serpentine_photo_batch_info['photos'].append(
             dict(file_name=file_name, position=position)
-        )
-        
-        # Ensure runtime parameters are saved in the JSON file as well
-        batch_info['start_x'] = self.start_x_textbox.text()
-        batch_info['start_y'] = self.start_y_textbox.text()
-        batch_info['start_z'] = self.start_z_textbox.text()
-        batch_info['end_x'] = self.end_x_textbox.text()
-        batch_info['end_y'] = self.end_y_textbox.text()
-        batch_info['end_z'] = self.end_z_textbox.text()
-        batch_info['max_step_size_x'] = self.max_step_size_x_textbox.text()
-        batch_info['max_step_size_y'] = self.max_step_size_y_textbox.text()
-        
-        
-        # Write the JSON file back to disk
-        with open(batch_info_file, "w") as jsonfile:
-            json.dump(batch_info, jsonfile)
+        )        
 
     def show_serpentine_photo(self, image_path, caption):
         """Display an photo in the designated label area, labeled with the supplied caption"""
@@ -1594,6 +1594,7 @@ class Ui(QMainWindow):
             if batch_dirs:
                 last_batch_number = int(batch_dirs[-1])
             solver_batch_working_dir = posixpath.join(solver_dir, str(last_batch_number))
+            self.solver_batch_working_dir = solver_batch_working_dir
             
             # Emit the trigger to start the computation
             self.solver.trigger_solution_computation.emit(solver_batch_working_dir)
@@ -1745,7 +1746,7 @@ class Ui(QMainWindow):
         
             # Add in the desired motor origin of where we want the puzzle solution to go, to find the absolute 
             # location of the destination drop-off point in robot coordinates
-            solution_motor_origin = (80000, 295000)
+            solution_motor_origin = (78285, 308000) # ICC changed was 80000, 295000
 
             dest_motor_counts_x += solution_motor_origin[0]
             dest_motor_counts_y += solution_motor_origin[1]
@@ -1801,9 +1802,9 @@ class Ui(QMainWindow):
             self.send_clearcore_command(f"m {x},{y},{SAFE_TRAVEL_Z}", blocking=True)
             QApplication.processEvents()
 
-            # Rotate back to 0
+            # Rotate back to 0 (don't block, let this happen while we're moving to the pickup position)
             logging.debug("ROTATING TO 0")
-            self.send_gripper_command(f"r 0", blocking=True)
+            self.send_gripper_command(f"r 0", blocking=False)
             QApplication.processEvents()
 
             # Move to the pickup position
@@ -1829,14 +1830,14 @@ class Ui(QMainWindow):
             self.send_clearcore_command(f"m {src_x},{src_y},{SAFE_TRAVEL_Z}", blocking=True)
             QApplication.processEvents()
 
+            # Rotate to destination angle (don't block, let this happen while we're moving)
+            logging.debug("ROTATING TO FINAL ANGLE")
+            self.send_gripper_command(f"r {dst_angle}", blocking=False)
+            QApplication.processEvents()
+
             # Move to the destination position
             logging.debug("MOVING TO DESTINATION POSITION")
             self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
-            QApplication.processEvents()
-
-            # Rotate to destination angle
-            logging.debug("ROTATING TO FINAL ANGLE")
-            self.send_gripper_command(f"r {dst_angle}", blocking=True)
             QApplication.processEvents()
 
             # Move DOWN to drop off position

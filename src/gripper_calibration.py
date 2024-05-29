@@ -193,7 +193,7 @@ class GripperCalibration(QThread):
         camera_delta_img = correct_perspective(camera_delta_img, perspective_starting_quad, perspective_corrected_quad, crop=True)
         gripper_delta_img = correct_perspective(gripper_delta_img, perspective_starting_quad, perspective_corrected_quad, crop=True)
 
-        # Rotate the images so the image X axis is paralle with the motor X axis
+        # Rotate the images so the image X axis is parallel with the motor X axis
         start_img = rotate_image(start_img, perspective_angle, crop=True)
         camera_delta_img = rotate_image(camera_delta_img, perspective_angle, crop=True)
         gripper_delta_img = rotate_image(gripper_delta_img, perspective_angle, crop=True)
