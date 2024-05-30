@@ -120,6 +120,9 @@ class GalaxyS24(QThread):
         local_photo_path = posixpath.join(batch_dir, remote_file_name)
         retcode, stdout = self.adb(f"adb pull -a {remote_photo_path}", 0, cwd=batch_dir)
         if not retcode: return
+        
+        # Delete photos, so the directory doesn't fill up (which causes slowness when we're listing it)
+        if not self.adb("adb shell rm sdcard/DCIM/Camera/*.jpg", 0)[0]: return
             
         # Let other threads know a new photo has been captured
         self.photo_captured.emit(local_photo_path)
