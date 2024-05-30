@@ -31,6 +31,8 @@ import process, solve
 from common import util
 from common.config import *
 
+PIECE_SET_PROPERLY_ENCODER_THRESHOLD = 4300
+
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
 SAFE_TRAVEL_Z = 15000 # ICC Was 30000
@@ -307,9 +309,9 @@ class Ui(QMainWindow):
         
         # Process 'd' linear encoder position responses
         if line.startswith("SUCCESS: printEncoderDigitalValue"):
-            linear_encoder_value = parse_int(line.split(" ")[-1])
+            self.linear_encoder_value = parse_int(line.split(" ")[-1])
             # Update the textbox with the value
-            self.linear_encoder_textbox.setText(str(linear_encoder_value))
+            self.linear_encoder_textbox.setText(str(self.linear_encoder_value))
 
         # Format line and add it to the textarea
         html_line = ""
@@ -1619,7 +1621,7 @@ class Ui(QMainWindow):
             
     ################################################################################################
     ################################################################################################
-    # "SOLVE PUZZLE" TAB
+    # "MOVE PIECES" TAB
     ################################################################################################
     ################################################################################################
     def setup_perform_moves_tab(self):
@@ -1844,6 +1846,37 @@ class Ui(QMainWindow):
             logging.debug("MOVING DOWN TO DROP OFF POSITION")
             self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
             QApplication.processEvents()
+            
+            # Check to see if we think the piece was properly placed
+            self.send_gripper_command('d', update_position=False, blocking=True))
+            if self.linear_encoder_value < PIECE_SET_PROPERLY_ENCODER_THRESHOLD:
+                # Piece is not set properly... try the "wiggle" routine
+                # This is where we try moving north, north-east, east, south-east, etc all the way
+                # around the cardinal dial, and we see if we can get the piece to set properly.
+                # For starters let's look at moving 50 motor counts in each of those directions.
+                # This translates to about 5 px, which translates to about 7.5 thousandths of an inch
+                for y_delta_motor_counts in [-50, 0, 50]:
+                    for x_delta_motor_counts in [-50, 0, 50]:
+                        logging.debug(f"WIGGLE {x_delta_motor_counts},{y_delta_motor_counts}")
+                        # move UP
+                        self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
+                        QApplication.processEvents()
+                        # move to the delta position
+                        self.send_clearcore_command(f"m {dst_x + x},{dst_y + y},{SAFE_TRAVEL_Z}", blocking=True)
+                        QApplication.processEvents()
+                        # move DOWN to drop off the piece
+                        self.send_clearcore_command(f"m {dst_x + x},{dst_y + y},{DROPOFF_Z}", blocking=True)
+                        QApplication.processEvents()
+                        # check to see if the piece was properly placed
+                        self.send_gripper_command('d', update_position=False, blocking=True))
+                        if self.linear_encoder_value < PIECE_SET_PROPERLY_ENCODER_THRESHOLD:
+                            # Piece still not set, continue trying
+                            continue
+                        else:
+                            # Piece is now set!
+                            logging.debug("WIGGLE WORKED!")
+                            # Slide piece back to where it should have been centered at
+                            self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
 
             # Turn vacuum off
             logging.debug("TURNING OFF VACUUM")
