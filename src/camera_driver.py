@@ -122,7 +122,8 @@ class GalaxyS24(QThread):
         if not retcode: return
         
         # Delete photos, so the directory doesn't fill up (which causes slowness when we're listing it)
-        if not self.adb("adb shell rm sdcard/DCIM/Camera/*.jpg", 0)[0]: return
+        retcode, stdout = self.adb("adb shell rm sdcard/DCIM/Camera/*.jpg", 0)
+        # For now we ignore the retcode
             
         # Let other threads know a new photo has been captured
         self.photo_captured.emit(local_photo_path)
