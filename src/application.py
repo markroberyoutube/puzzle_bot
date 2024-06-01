@@ -31,13 +31,14 @@ import process, solve
 from common import util
 from common.config import *
 
-PIECE_SET_PROPERLY_ENCODER_THRESHOLD = 5100 # ICC was 4918
+PIECE_SET_PROPERLY_ENCODER_THRESHOLD = 4000 # ICC was 4918, then 5100, then 4900, then reduced 900 bc I lowered dropoff_z
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
 SAFE_TRAVEL_Z = 15000 # ICC Was 30000
-DROPOFF_Z = 8000
-PICKUP_Z = 8000
+DROPOFF_Z = 7000 # ICC Was 8000
+PICKUP_Z = 7000 # ICC Was 8000
+SCOOT_Z = 8477 
 
 CAMERA_Z = 136000
 
@@ -1588,8 +1589,8 @@ class Ui(QMainWindow):
             self.solver.solution_ready.connect(on_results)
             
             # Find the most recent batch directory
-            solver_dir = self.solver_directory_textbox.text()
             last_batch_number = 0
+            solver_dir = self.solver_directory_textbox.text()
             sub_dirs = [d for d in os.listdir(solver_dir) if posixpath.isdir(posixpath.join(solver_dir, d))]
             batch_dirs = [d for d in sub_dirs if d.isnumeric()]
             batch_dirs.sort(key=int) # sorts in place
@@ -1848,6 +1849,11 @@ class Ui(QMainWindow):
             QApplication.processEvents()
             
             # Check to see if we think the piece was properly placed
+            # starting position for the wiggle move, if needed
+            dst_x = parse_int(dst_x)
+            dst_y = parse_int(dst_y)
+            wiggle_x = dst_x
+            wiggle_y = dst_y
             self.linear_encoder_value = None
             while self.linear_encoder_value is None:
                 self.send_gripper_command('d', update_position=False, blocking=True)
@@ -1857,22 +1863,28 @@ class Ui(QMainWindow):
                 # around the cardinal dial, and we see if we can get the piece to set properly.
                 # For starters let's look at moving 50 motor counts in each of those directions.
                 # This translates to about 5 px, which translates to about 7.5 thousandths of an inch
-                dst_x = parse_int(dst_x)
-                dst_y = parse_int(dst_y)
                 wiggle_finished = False
                 for y_delta_motor_counts in [-100, -50, 0, 50, 100]:
                     for x_delta_motor_counts in [-100, -50, 0, 50, 100]:
                         if not wiggle_finished:
+                            # move UP from current position
+                            self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SAFE_TRAVEL_Z}", blocking=True)
+                            QApplication.processEvents()
+
+                            # Calculate delta position
+                            wiggle_x = dst_x + x_delta_motor_counts
+                            wiggle_y = dst_y + y_delta_motor_counts
                             logging.debug(f"WIGGLE {x_delta_motor_counts},{y_delta_motor_counts}")
-                            # move UP
-                            self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
                             QApplication.processEvents()
+
                             # move to the delta position
-                            self.send_clearcore_command(f"m {dst_x + x_delta_motor_counts},{dst_y + y_delta_motor_counts},{SAFE_TRAVEL_Z}", blocking=True)
+                            self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SAFE_TRAVEL_Z}", blocking=True)
                             QApplication.processEvents()
+
                             # move DOWN to drop off the piece
-                            self.send_clearcore_command(f"m {dst_x + x_delta_motor_counts},{dst_y + y_delta_motor_counts},{DROPOFF_Z}", blocking=True)
+                            self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{DROPOFF_Z}", blocking=True)
                             QApplication.processEvents()
+
                             # check to see if the piece was properly placed
                             self.linear_encoder_value = None
                             while self.linear_encoder_value is None:
@@ -1885,8 +1897,15 @@ class Ui(QMainWindow):
                                 # Piece is now set!
                                 logging.debug("WIGGLE WORKED!")
 
-            # Slide piece back to where it should have been centered at
-            self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
+                # Raise the gripper slightly, to a "scoot" height, so there is no weight on 
+                # the piece and we can scoot the piece around
+                self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
+
+                # Scoot piece back to where it should have been centered at
+                self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
+
+                # Put piece down in its final position
+                self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
 
             # Turn vacuum off
             logging.debug("TURNING OFF VACUUM")
