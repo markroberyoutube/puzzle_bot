@@ -31,16 +31,23 @@ import process, solve
 from common import util
 from common.config import *
 
+# The encoder when fully extended can read from 5162 to 5184. At 5170 it's DEFINITELY extended all the way
+ENCODER_FULLY_EXTENDED = 5160
+
+# The pieces ranged from 1408 to 1459 with an average of 1429.6
+# so we set the minimum thickness a little less than the minimum measured as a safety buffer
+MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS = 1400
+
+# Define the relationship between linear encoder counts and Z motor counts
+ENCODER_COUNTS_PER_Z_MOTOR_COUNTS = 0.93357142857 # Measured manually on 6/3/2024
+
+# Maximum distance between table and bottom of piece at which to declare the piece is FULLY set
 # At this encoder value, the piece is placed. Drop it off and leave it there.
-# For DROPOFF_Z = 7000, try THRESHOLD = 3800, 3900, or 4000
-# For DROPOFF_Z = 9200, try THRESHOLD = 5160
-PIECE_SET_PROPERLY_ENCODER_THRESHOLD = 3900 # ICC was 4918, then 5100, then 4900, then reduced 900 bc I lowered dropoff_z
+PIECE_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS * 0.1
 
-# At this encoder value, switch from "pick up and wiggle" to "scoot and wiggle" strategy
-PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD = 3000 # ICC was 3300, then 3400
-
-# While doing the "scoot and wiggle" routine, this is the threshold for a properly set piece
-SCOOT_WIGGLE_ROUTINE_PIECE_SET_PROPERLY_ENCODER_THRESHOLD = 5180 # ICC Was 5175
+# Maximum distance between table and bottom of piece at which to declare the piece is NEARLY set
+# At this threshold, we switch from "pick up and wiggle" to "scoot and wiggle" strategy
+PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS * 0.5
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
@@ -1646,6 +1653,14 @@ class Ui(QMainWindow):
         #     lambda minVal, maxVal: perform_moves_scrollbar.setValue(perform_moves_scrollbar.maximum())
         # )
         
+        # Get table height mapping
+        self.table_height_map = []
+        with open("solution_table_height.csv", "r") as csvfile:
+            self.table_height_map_measurement_z = 6000 # from map_solution_table_height.py
+            for line in csvfile.readlines():
+                x, y, encoder_value = line.strip(" ").split(",")
+                self.table_height_map.append([x, y, encoder_value])
+
         # Connect buttons
         self.list_moves_button.clicked.connect(self.list_moves)
         self.perform_moves_button.clicked.connect(self.move_pieces_into_place)
@@ -1788,9 +1803,37 @@ class Ui(QMainWindow):
         self.perform_moves_button.setEnabled(True)
         self.set_clearcore_availability(True)
         self.set_gripper_availability(True)
+    
+    def get_table_height(self, x, y, z):
+        """Find the table height mapping value nearest this location."""
+        nearest_x, nearest_y, nearest_encoder_value = self.table_height_map[0]
+        for map_x, map_y, map_encoder_value in self.table_height_map[1:]:
+            # Look for a closer point
+            if util.distance([map_x, map_y], [x, y]) < util.distance([nearest_x, nearest_y], [x, y]):
+                nearest_x = map_x
+                nearest_y = map_y
+                nearest_encoder_value = map_encoder_value
         
+        # Compensate for the difference in Z between the map measurements and the desired z height
+        return nearest_encoder_value + ((z - self.table_height_map_measurement_z)*ENCODER_COUNTS_PER_Z_MOTOR_COUNTS)
+
+    def get_fully_placed_encoder_threshold(self, x, y, z):
+        # First find the table height mapping value nearest this location
+        table_height_encoder_value = self.get_table_height(x, y, z)
+
+        # Next add the piece thickness and the maximum acceptable distance between table and piece
+        return table_height_encoder_value + PIECE_SET_PROPERLY_ENCODER_THRESHOLD + MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS
+
+    def get_nearly_placed_encoder_threshold(self, x, y, z):
+        # First find the table height mapping value nearest this location
+        table_height_encoder_value = self.get_table_height(x, y, z)
+
+        # Next add the piece thickness and the maximum acceptable distance between table and piece
+        return table_height_encoder_value + PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD + MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS
+
     @pyqtSlot()
     def move_pieces_into_place(self):
+        # Parse the moves
         moves = self.perform_moves_textarea.toPlainText()
         for move in moves.splitlines():
             # Parse each of the moves
@@ -1896,8 +1939,11 @@ class Ui(QMainWindow):
             wiggle_best_angle = dst_angle
             wiggle_best_encoder_hysteresis = 25 # New encoder values need to be this much better to save them
 
-            if self.linear_encoder_value < PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD:
+            localized_nearly_placed_encoder_threshold = self.get_nearly_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
+            if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
                 # Piece is not set even close to properly... try the "pick up and wiggle" routine
+                logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not < {localized_nearly_placed_encoder_threshold})")
+                logging.debug("TRYING 'PICK UP AND WIGGLE' ROUTINE...")
                 wiggle_finished = False
                 try_number = 0
                 maximum_tries = 5 # Maximum number of search loops
@@ -1941,7 +1987,7 @@ class Ui(QMainWindow):
                                     self.linear_encoder_value = None
                                     while self.linear_encoder_value is None:
                                         self.send_gripper_command('d', update_position=False, blocking=True)
-                                    if self.linear_encoder_value < PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD:
+                                    if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
                                         # Piece still not close to being set, continue trying
                                         # If this position is better than prior ones, record it
                                         if self.linear_encoder_value > (wiggle_best_encoder_value + wiggle_best_encoder_hysteresis):
@@ -1959,12 +2005,15 @@ class Ui(QMainWindow):
 
             # At this point check to see if the piece is FULLY set. 
             # If not do the "scoot and wiggle" routine
-            if self.linear_encoder_value < PIECE_SET_PROPERLY_ENCODER_THRESHOLD:
+            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z):
+            if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
+                logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not < {localized_fully_placed_encoder_threshold})")
+                logging.debug("TRYING 'SCOOT AND WIGGLE' ROUTINE...")
                 wiggle_finished = False
                 # move to scoot height
                 self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
                 QApplication.processEvents()
-                for y_delta_motor_counts in [-100, +100, -200, +200,]: # ICC was -100, -50, 0, 50, 100
+                for y_delta_motor_counts in [-100, +100, -200, +200]: # ICC was -100, -50, 0, 50, 100
                     for x_delta_motor_counts in [-100, +100, -200, +200]: # ICC was -100, -50, 0, 50, 100
                         if not wiggle_finished:
                             # Calculate delta position
@@ -1982,7 +2031,8 @@ class Ui(QMainWindow):
                             while self.linear_encoder_value is None:
                                 self.send_gripper_command('d', update_position=False, blocking=True)
                                 QApplication.processEvents()
-                            if self.linear_encoder_value < SCOOT_WIGGLE_ROUTINE_PIECE_SET_PROPERLY_ENCODER_THRESHOLD:
+                            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z):
+                            if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
                                 # Piece still not set, continue trying
                                 pass
                             else:
