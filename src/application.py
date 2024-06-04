@@ -2005,7 +2005,7 @@ class Ui(QMainWindow):
 
             # At this point check to see if the piece is FULLY set. 
             # If not do the "scoot and wiggle" routine
-            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z):
+            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
             if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
                 logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not < {localized_fully_placed_encoder_threshold})")
                 logging.debug("TRYING 'SCOOT AND WIGGLE' ROUTINE...")
@@ -2031,7 +2031,7 @@ class Ui(QMainWindow):
                             while self.linear_encoder_value is None:
                                 self.send_gripper_command('d', update_position=False, blocking=True)
                                 QApplication.processEvents()
-                            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z):
+                            localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z)
                             if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
                                 # Piece still not set, continue trying
                                 pass
