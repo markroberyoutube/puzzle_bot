@@ -1368,6 +1368,15 @@ class Ui(QMainWindow):
                 # Connect the callback
                 self.clearcore.line_received.connect(on_response)
                 
+                # Move the eyes the direction we'll be traveling (left or right)
+                neutral_eye_angle = 90
+                left_eye_angle = neutral_eye_angle - 60
+                right_eye_angle = neutral_eye_angle + 60
+                if moving_right:
+                    self.send_gripper_command(f"e {right_eye_angle}", blocking=True)
+                else:
+                    self.send_gripper_command(f"e {left_eye_angle}", blocking=True)
+                
                 # Send command to begin moving to the desired location, and block until finished
                 self.send_clearcore_command(f"m {x},{y},{z}", blocking=True)
                 
@@ -1416,6 +1425,11 @@ class Ui(QMainWindow):
 
             # After all x passes are finished, reset the direction of motion
             moving_right = not moving_right
+        
+        
+        # Now that we're done taking photos, make the eyes point down again to the neutral position
+        neutral_eye_angle = 90
+        self.send_gripper_command(f"e {neutral_eye_angle}", blocking=True)
         
         # After all photos have been taken, write the batch info to file and 
         # copy the batch_info.json file into the solver batch dir
