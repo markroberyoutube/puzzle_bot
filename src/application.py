@@ -1724,12 +1724,13 @@ class Ui(QMainWindow):
             if piece["solution_y"] > max_y:
                 max_y = piece["solution_y"]
         
-        # Sort the pieces in spiral order
+        # Sort the pieces in order of how we want to assemble them
         all_pieces = np.ndindex((max_x + 1, max_y + 1))
-        pieces_in_spiral_order = spiral_order(all_pieces)
+        #pieces_in_spiral_order = spiral_order(all_pieces)
+        pieces_in_anchor_order = anchor_order(all_pieces)
         
         # For each piece coordinate in order, find the desired move
-        for x,y in pieces_in_spiral_order:
+        for x,y in pieces_in_anchor_order:
             piece = [p for p in solution if p["solution_x"] == x and p["solution_y"] == y][0]
 
             # Find the pickup point w.r.t the photo origin, in pixels
@@ -1976,10 +1977,10 @@ class Ui(QMainWindow):
                 logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
                 logging.debug("TRYING 'PICK UP AND SPIRAL WIGGLE' ROUTINE...")
                 piece_placed = False
-                delta_x = 100
-                delta_y = 100
+                delta_x = 200
+                delta_y = 200
                 try_number = 0
-                maximum_tries = 2
+                maximum_tries = 1
                 best_encoder_value = self.linear_encoder_value
                 
                 while not piece_placed and try_number < maximum_tries:
