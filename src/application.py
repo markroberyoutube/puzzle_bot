@@ -1959,12 +1959,10 @@ class Ui(QMainWindow):
             self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
             QApplication.processEvents()
             
-            
-            
             wiggle_x = dst_x
             wiggle_y = dst_y
             
-            if os.path.exists("wiggle_on"):
+            if os.path.exists("pick_on"):
                 # Starting position for the wiggle move, if needed
                 best_x_position = wiggle_x
                 best_y_position = wiggle_y
@@ -1977,15 +1975,17 @@ class Ui(QMainWindow):
 
                 # PICK UP AND SPIRAL WIGGLE ROUTINE:
                 localized_nearly_placed_encoder_threshold = self.get_nearly_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
-                if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
+                if not self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
+                    logging.debug(f"PIECE NEARLY PLACED! ({self.linear_encoder_value} > {localized_nearly_placed_encoder_threshold})")
+                else:
                     # Piece is not set even close to properly... try the "pick up and wiggle" routine
                     logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
                     logging.debug("TRYING 'PICK UP AND SPIRAL WIGGLE' ROUTINE...")
                     piece_placed = False
-                    delta_x = 200
-                    delta_y = 200
+                    delta_x = 100
+                    delta_y = 100
                     try_number = 0
-                    maximum_tries = 1
+                    maximum_tries = 3
                     best_encoder_value = self.linear_encoder_value
         
                     while not piece_placed and try_number < maximum_tries:
@@ -2046,186 +2046,59 @@ class Ui(QMainWindow):
                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
                         QApplication.processEvents()
 
-                # At this point check to see if the piece is FULLY set. 
-                # If not do the "scoot and wiggle" routine
-                localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
-                if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
-                    logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
-                    logging.debug("TRYING 'SCOOT AND WIGGLE' ROUTINE...")
-                    piece_placed = False
-                    # move to scoot height
-                    self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
-                    QApplication.processEvents()
+                if os.path.exists("scoot_on"):
+                    # At this point check to see if the piece is FULLY set. 
+                    # If not do the "scoot and wiggle" routine if specified
+                    localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
+                    if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
+                        logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
+                        logging.debug("TRYING 'SCOOT AND WIGGLE' ROUTINE...")
+                        piece_placed = False
+                        # move to scoot height
+                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
+                        QApplication.processEvents()
         
+                        delta_x = 50
+                        delta_y = 50
+                        try_number = 0
+                        maximum_tries = 15
         
-                    delta_x = 50
-                    delta_y = 50
-                    try_number = 0
-                    maximum_tries = 15
-        
-                    while not piece_placed and try_number < maximum_tries:
-                        # Execute a 9 point search, and if piece doesn't place then widen that search
-                        for delta_pos in [(-delta_x, 0), (+delta_x, 0), (0, 0), (0, -delta_y), (0, +delta_y), (0, 0)]: 
-                            if not piece_placed:
-                                # Calculate delta position
-                                wiggle_x = best_x_position + delta_pos[0]
-                                wiggle_y = best_y_position + delta_pos[1]
-                                logging.debug(f"WIGGLE ({delta_pos[0]},{delta_pos[1]})")
-                                QApplication.processEvents()
-
-                                # move to the delta position
-                                self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
-                                QApplication.processEvents()
-
-                                # check to see if the piece was properly placed
-                                self.linear_encoder_value = None
-                                while self.linear_encoder_value is None:
-                                    self.send_gripper_command('d', update_position=False, blocking=True)
+                        while not piece_placed and try_number < maximum_tries:
+                            # Execute a 9 point search, and if piece doesn't place then widen that search
+                            for delta_pos in [(-delta_x, 0), (+delta_x, 0), (0, 0), (0, -delta_y), (0, +delta_y), (0, 0)]: 
+                                if not piece_placed:
+                                    # Calculate delta position
+                                    wiggle_x = best_x_position + delta_pos[0]
+                                    wiggle_y = best_y_position + delta_pos[1]
+                                    logging.debug(f"WIGGLE ({delta_pos[0]},{delta_pos[1]})")
                                     QApplication.processEvents()
-                                localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z)
-                                if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
-                                    # Piece still not set, continue trying
-                                    logging.debug(f"PIECE STILL NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
-                                    pass
-                                else:
-                                    piece_placed = True
 
-                                    # Piece is now set!
-                                    logging.debug("SCOOT AND WIGGLE WORKED!")
+                                    # move to the delta position
+                                    self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
+                                    QApplication.processEvents()
+
+                                    # check to see if the piece was properly placed
+                                    self.linear_encoder_value = None
+                                    while self.linear_encoder_value is None:
+                                        self.send_gripper_command('d', update_position=False, blocking=True)
+                                        QApplication.processEvents()
+                                    localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z)
+                                    if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
+                                        # Piece still not set, continue trying
+                                        logging.debug(f"PIECE STILL NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
+                                        pass
+                                    else:
+                                        piece_placed = True
+
+                                        # Piece is now set!
+                                        logging.debug("SCOOT AND WIGGLE WORKED!")
                         
-                                    # Scoot the piece back to its original destination to prevent the build-up of error
-                                    self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
-                                    QApplication.processEvents()
-                            delta_x += 25
-                            delta_y += 25
-                            try_number += 1
-
-
-                # Keep track of the best position so far (used by the wiggle routine)
-                # wiggle_best_encoder_value = self.linear_encoder_value
-                # wiggle_best_location = (dst_x, dst_y)
-                # wiggle_best_angle = dst_angle
-                # wiggle_best_encoder_hysteresis = 25 # New encoder values need to be this much better to save them
-
-                # localized_nearly_placed_encoder_threshold = self.get_nearly_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
-                # if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
-                #     # Piece is not set even close to properly... try the "pick up and wiggle" routine
-                #     logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
-                #     logging.debug("TRYING 'PICK UP AND WIGGLE' ROUTINE...")
-                #     wiggle_finished = False
-                #     try_number = 0
-                #     maximum_tries = 7 # Maximum number of search loops
-                #
-                #     maximum_delta_y = 400 # ICC was 400
-                #     maximum_delta_x = 400 # ICC was 400
-                #     maximum_delta_angle = 600 # ICC was 910
-                #
-                #     while try_number < maximum_tries:
-                #         # Do a 9-position x 3 angle search, centered around the best option so far
-                #         this_try_neutral_location = wiggle_best_location
-                #         this_try_neutral_angle = wiggle_best_angle
-                #         for y_delta_motor_counts in [-maximum_delta_y, +maximum_delta_y]:
-                #             for x_delta_motor_counts in [-maximum_delta_x, +maximum_delta_x]:
-                #                 #for angle_delta_motor_counts in [-maximum_delta_angle, +maximum_delta_angle]:
-                #                     if not wiggle_finished:
-                #                         # move UP from current position
-                #                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
-                #                         QApplication.processEvents()
-                #
-                #                         # Calculate delta position
-                #                         wiggle_x = this_try_neutral_location[0] + x_delta_motor_counts
-                #                         wiggle_y = this_try_neutral_location[1] + y_delta_motor_counts
-                #                         #wiggle_angle = this_try_neutral_angle + angle_delta_motor_counts
-                #                         logging.debug(f"WIGGLE ({wiggle_x},{wiggle_y}), ANGLE {wiggle_angle}")
-                #                         QApplication.processEvents()
-                #
-                #                         # move to the delta position
-                #                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
-                #                         QApplication.processEvents()
-                #
-                #                         # rotate to delta angle
-                #                         #self.send_gripper_command(f"r {wiggle_angle}", blocking=True)
-                #                         #QApplication.processEvents()
-                #
-                #                         # move DOWN to drop off the piece
-                #                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{DROPOFF_Z}", blocking=True)
-                #                         QApplication.processEvents()
-                #
-                #                         # check to see if the piece was properly placed
-                #                         self.linear_encoder_value = None
-                #                         while self.linear_encoder_value is None:
-                #                             self.send_gripper_command('d', update_position=False, blocking=True)
-                #                         if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
-                #                             logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
-                #                             # Piece still not close to being set, continue trying
-                #                             # If this position is better than prior ones, record it
-                #                             if self.linear_encoder_value > (wiggle_best_encoder_value + wiggle_best_encoder_hysteresis):
-                #                                 wiggle_best_encoder_value = self.linear_encoder_value
-                #                                 wiggle_best_angle = wiggle_angle
-                #                                 wiggle_best_location = (wiggle_x, wiggle_y)
-                #                         else:
-                #                             wiggle_finished = True
-                #
-                #                             # Piece is now set!
-                #                             logging.debug("PICK UP AND WIGGLE WORKED!")
-                #
-                #                             # After the pick and wiggle, move up to the scoot z and then
-                #                             # place the piece to where it should have been
-                #                             # self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
-                #                             # QApplication.processEvents()
-                #                             # self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
-                #                             # QApplication.processEvents()
-                #                             # self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
-                #                             # QApplication.processEvents()
-                #
-                #         try_number += 1
-                #         maximum_delta_y = int(maximum_delta_y * 0.75)
-                #         maximum_delta_x = int(maximum_delta_x * 0.75)
-                #         maximum_delta_angle = int(maximum_delta_angle * 0.75)
-
-                # At this point check to see if the piece is FULLY set. 
-                # If not do the "scoot and wiggle" routine
-                # localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
-                # if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
-                #     logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
-                #     logging.debug("TRYING 'SCOOT AND WIGGLE' ROUTINE...")
-                #     wiggle_finished = False
-                #     # move to scoot height
-                #     self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
-                #     QApplication.processEvents()
-                #     for y_delta_motor_counts in [-100, +100, -200, +200]: # ICC was -100, -50, 0, 50, 100
-                #         for x_delta_motor_counts in [-100, +100, -200, +200]: # ICC was -100, -50, 0, 50, 100
-                #             if not wiggle_finished:
-                #                 # Calculate delta position
-                #                 wiggle_x = wiggle_best_location[0] + x_delta_motor_counts
-                #                 wiggle_y = wiggle_best_location[1] + y_delta_motor_counts
-                #                 logging.debug(f"WIGGLE ({x_delta_motor_counts},{y_delta_motor_counts})")
-                #                 QApplication.processEvents()
-                #
-                #                 # move to the delta position
-                #                 self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SCOOT_Z}", blocking=True)
-                #                 QApplication.processEvents()
-                #
-                #                 # check to see if the piece was properly placed
-                #                 self.linear_encoder_value = None
-                #                 while self.linear_encoder_value is None:
-                #                     self.send_gripper_command('d', update_position=False, blocking=True)
-                #                     QApplication.processEvents()
-                #                 localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, SCOOT_Z)
-                #                 if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
-                #                     # Piece still not set, continue trying
-                #                     logging.debug(f"PIECE STILL NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
-                #                     pass
-                #                 else:
-                #                     wiggle_finished = True
-                #
-                #                     # Piece is now set!
-                #                     logging.debug("SCOOT AND WIGGLE WORKED!")
-                #
-                #                     # after scooting, move the piece to where it should have been
-                #                     # self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
-                #                     # QApplication.processEvents()
-
+                                        # Scoot the piece back to its original destination to prevent the build-up of error
+                                        self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
+                                        QApplication.processEvents()
+                                delta_x += 25
+                                delta_y += 25
+                                try_number += 1 
 
             # Turn vacuum off
             logging.debug("TURNING OFF VACUUM")
