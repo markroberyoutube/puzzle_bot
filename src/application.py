@@ -47,7 +47,7 @@ PIECE_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS
 
 # Maximum distance between table and bottom of piece at which to declare the piece is NEARLY set
 # At this threshold, we switch from "pick up and wiggle" to "scoot and wiggle" strategy
-PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS * 0.6 # ICC was *0.3
+PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER_COUNTS * 0.25 # ICC was 0.6
 
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
@@ -1961,8 +1961,9 @@ class Ui(QMainWindow):
             
             wiggle_x = dst_x
             wiggle_y = dst_y
-            
-            if os.path.exists("pick_on"):
+
+            # GRID WIGGLE (IN ANCHOR ORDER)
+            if os.path.exists("grid_on"):
                 # Starting position for the wiggle move, if needed
                 best_x_position = wiggle_x
                 best_y_position = wiggle_y
@@ -1973,24 +1974,33 @@ class Ui(QMainWindow):
                 while self.linear_encoder_value is None:
                     self.send_gripper_command('d', update_position=False, blocking=True)
 
-                # PICK UP AND SPIRAL WIGGLE ROUTINE:
+                # PICK UP AND WIGGLE ROUTINE:
                 localized_nearly_placed_encoder_threshold = self.get_nearly_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
                 if not self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
                     logging.debug(f"PIECE NEARLY PLACED! ({self.linear_encoder_value} > {localized_nearly_placed_encoder_threshold})")
                 else:
                     # Piece is not set even close to properly... try the "pick up and wiggle" routine
                     logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
-                    logging.debug("TRYING 'PICK UP AND SPIRAL WIGGLE' ROUTINE...")
+                    logging.debug("TRYING 'PICK UP AND GRID WIGGLE' ROUTINE...")
                     piece_placed = False
-                    delta_x = 100
-                    delta_y = 100
-                    try_number = 0
-                    maximum_tries = 3
+                    delta_x = 66
+                    delta_y = 66
+                    steps_neg_x = 10 # 10 steps of 66 counts (10 thou) gets us -0.100
+                    steps_pos_x = 10 # 10 steps of 66 counts (10 thou) gets us +0.100
+                    steps_neg_y = 10 # 10 steps of 66 counts (10 thou) gets us -0.100
+                    steps_pos_y = 10 # 10 steps of 66 counts (10 thou) gets us +0.100
+                    
                     best_encoder_value = self.linear_encoder_value
         
-                    while not piece_placed and try_number < maximum_tries:
-                        # Execute a 9 point search, and if piece doesn't place then widen that search
-                        for delta_pos in [(0, -delta_y), (-delta_x, -delta_y), (-delta_x, 0), (-delta_x, +delta_y), (0, +delta_y), (+delta_x, +delta_y), (+delta_x, 0), (+delta_x, -delta_y)]: 
+                    while not piece_placed:
+                        # Execute a grid search in anchor order
+                        delta_positions = []
+                        for x in range(-delta_x*steps_neg_x, delta_x*steps_pos_x, delta_x):
+                            for y in range(+delta_y*steps_neg_y, -delta_y*steps_pos_y, -delta_y):
+                                delta_positions.append([x,y])
+                        print(f"GENERATED {len(delta_positions)} grid positions to try")
+
+                        for delta_pos in delta_positions: 
                             if not piece_placed:
                                 # move UP from current position
                                 self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
@@ -2000,7 +2010,7 @@ class Ui(QMainWindow):
                                 wiggle_x = dst_x + delta_pos[0]
                                 wiggle_y = dst_y + delta_pos[1]
                 
-                                logging.debug(f"PICK AND SPIRAL WIGGLE ({delta_pos[0]},{delta_pos[1]})")
+                                logging.debug(f"PICK AND GRID WIGGLE ({delta_pos[0]},{delta_pos[1]})")
                                 QApplication.processEvents()
 
                                 # move to the delta position
@@ -2029,16 +2039,115 @@ class Ui(QMainWindow):
                                     piece_placed = True
 
                                     # Piece is nearly set!
-                                    logging.debug("PICK UP AND SPIRAL WIGGLE WORKED!")
+                                    logging.debug("PICK UP AND GRID WIGGLE WORKED!")
             
-                        try_number += 1
-                        delta_x += 100
-                        delta_y += 100
-        
                     if not piece_placed:    
+                        # Go to the best found location from "pick up and grid wiggle" before moving on to "scoot and wiggle"
+                        # Move UP from current position
+                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                        QApplication.processEvents()
+                        # Move to the best found location (the one with the largest encoder value)
+                        wiggle_x = best_x_position
+                        wiggle_y = best_y_position
+                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                        QApplication.processEvents()
+            
+            # SPIRAL WIGGLE
+            if os.path.exists("spiral_on"):
+                # Starting position for the wiggle move, if needed
+                best_x_position = wiggle_x
+                best_y_position = wiggle_y
+                best_angle = dst_angle
+                wiggle_angle = dst_angle
+
+                # Get the encoder value to see if the piece is set
+                self.linear_encoder_value = None
+                while self.linear_encoder_value is None:
+                    self.send_gripper_command('d', update_position=False, blocking=True)
+
+                # PICK UP AND SPIRAL WIGGLE ROUTINE:
+                localized_nearly_placed_encoder_threshold = self.get_nearly_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
+                if not self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
+                    logging.debug(f"PIECE NEARLY PLACED! ({self.linear_encoder_value} > {localized_nearly_placed_encoder_threshold})")
+                else:
+                    # Piece is not set even close to properly... try the "pick up and wiggle" routine
+                    logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
+                    logging.debug("TRYING 'PICK UP AND SPIRAL WIGGLE' ROUTINE...")
+
+                    piece_placed = False
+                    
+                    for delta_angle in [0, -500, 500]:
+                        if not piece_placed:
+                            # move UP from current position
+                            self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                            QApplication.processEvents()
+                        
+                            # Rotate to desired angle
+                            self.send_gripper_command(f"r {dst_angle + delta_angle}", blocking=True)
+                            QApplication.processEvents()
+
+                            delta_x = 50
+                            delta_y = 50                
+                            try_number = 0
+                            maximum_tries = 30
+                            best_encoder_value = self.linear_encoder_value
+
+                            while not piece_placed and try_number < maximum_tries:
+                                # Execute a 9 point search, and if piece doesn't place then widen that search
+                                delta_positions = [(0, -delta_y), (-delta_x, -delta_y), (-delta_x, 0), (-delta_x, +delta_y), (0, +delta_y), (+delta_x, +delta_y), (+delta_x, 0), (+delta_x, -delta_y)]
+                                for delta_pos in delta_positions:
+                                    if not piece_placed:
+                                        # move UP from current position
+                                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                                        QApplication.processEvents()
+
+                                        # Calculate delta position
+                                        wiggle_x = dst_x + delta_pos[0]
+                                        wiggle_y = dst_y + delta_pos[1]
+
+                                        logging.debug(f"PICK AND SPIRAL WIGGLE ({delta_pos[0]},{delta_pos[1]})")
+                                        QApplication.processEvents()
+
+                                        # move to the delta position
+                                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                                        QApplication.processEvents()
+
+                                        # move DOWN to drop off the piece
+                                        self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{DROPOFF_Z}", blocking=True)
+                                        QApplication.processEvents()
+
+                                        # Get the encoder value
+                                        self.linear_encoder_value = None
+                                        while self.linear_encoder_value is None:
+                                            self.send_gripper_command('d', update_position=False, blocking=True)
+
+                                        # Check to see if this is the best encoder value yet
+                                        if self.linear_encoder_value > best_encoder_value:
+                                            best_x_position = wiggle_x
+                                            best_y_position = wiggle_y
+                                            best_angle = dst_angle + delta_angle
+                                            best_encoder_value = self.linear_encoder_value
+
+                                        # Check to see if the piece was nearly placed
+                                        if self.linear_encoder_value < localized_nearly_placed_encoder_threshold:
+                                            logging.debug(f"PIECE NOT NEARLY PLACED ({self.linear_encoder_value} not > {localized_nearly_placed_encoder_threshold})")
+                                        else:
+                                            piece_placed = True
+
+                                            # Piece is nearly set!
+                                            logging.debug("PICK UP AND SPIRAL WIGGLE WORKED!")
+
+                                try_number += 1
+                                delta_x += 25
+                                delta_y += 25
+
+                    if not piece_placed:
                         # Go to the best found location from "pick up and spiral" before moving on to "scoot and wiggle"
                         # Move UP from current position
                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
+                        QApplication.processEvents()
+                        # Rotate to the best desired angle
+                        self.send_gripper_command(f"r {dst_angle + delta_angle}", blocking=True)
                         QApplication.processEvents()
                         # Move to the best found location (the one with the largest encoder value)
                         wiggle_x = best_x_position
