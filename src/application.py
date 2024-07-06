@@ -52,8 +52,8 @@ PIECE_NEARLY_SET_PROPERLY_ENCODER_THRESHOLD = MINIMUM_PIECE_THICKNESS_IN_ENCODER
 MAX_ROTATION_MOTOR_COUNTS = 65536
 
 SAFE_TRAVEL_Z = 15000 # ICC Was 30000
-DROPOFF_Z = 7000 # ICC Was 8000
-PICKUP_Z = 7000 # ICC Was 8000
+DROPOFF_Z = 7000 # ICC Was 8000, final answer is 7000
+PICKUP_Z = 7000 # ICC Was 7000
 SCOOT_Z = 8600 # ICC was 8477, then 9200, then 8800, then 8500, then 8600, then 8700, then 8800 Height to move to during the scoot routine
 WIGGLE_Z = 10000 # ICC Was 11000. Height to move to when doing the wiggle routine
 
@@ -1906,8 +1906,12 @@ class Ui(QMainWindow):
             logging.debug(f"POINTING EYES AT {eye_angle}")
             self.send_gripper_command(f"e {eye_angle}", blocking=True)
 
-            # Rotate back to 0 (don't block, let this happen while we're moving to the pickup position)
+            # Rotate back to 0. We perform this twice to make sure it actually rotates.
+            # The second time we don't bother to block, since it can rotate in the time
+            # it takes to move to the pickup position
             logging.debug("ROTATING TO 0")
+            self.send_gripper_command(f"r 0", blocking=True)
+            QApplication.processEvents()
             self.send_gripper_command(f"r 0", blocking=False)
             QApplication.processEvents()
 
@@ -1941,8 +1945,11 @@ class Ui(QMainWindow):
             eye_angle = left_eye_angle if dst_x < src_x else right_eye_angle
             self.send_gripper_command(f"e {eye_angle}", blocking=True)
 
-            # Rotate to destination angle (don't block, let this happen while we're moving)
+            # Rotate to destination angle. Do this twice to ensure it performed the command.
+            # The second time we don't block because this can happen while we're moving.
             logging.debug("ROTATING TO FINAL ANGLE")
+            self.send_gripper_command(f"r {dst_angle}", blocking=True)
+            QApplication.processEvents()
             self.send_gripper_command(f"r {dst_angle}", blocking=False)
             QApplication.processEvents()
 
@@ -1962,7 +1969,7 @@ class Ui(QMainWindow):
             wiggle_x = dst_x
             wiggle_y = dst_y
 
-            # GRID WIGGLE (IN ANCHOR ORDER)
+            # If grid search is enabled, try different positions and angles until the best location/angle is found
             if os.path.exists("grid_on"):
                 # Starting position for the wiggle move, if needed
                 best_x_position = wiggle_x
@@ -2076,20 +2083,22 @@ class Ui(QMainWindow):
 
                     piece_placed = False
                     
-                    for delta_angle in [0, -500, 500]:
+                    for delta_angle in [0]: #[0, -500, 500]:
                         if not piece_placed:
                             # move UP from current position
                             self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
                             QApplication.processEvents()
                         
-                            # Rotate to desired angle
+                            # Rotate to desired angle. Do this twice to make sure it worked
+                            self.send_gripper_command(f"r {dst_angle + delta_angle}", blocking=True)
+                            QApplication.processEvents()
                             self.send_gripper_command(f"r {dst_angle + delta_angle}", blocking=True)
                             QApplication.processEvents()
 
                             delta_x = 50
-                            delta_y = 50                
+                            delta_y = 50
                             try_number = 0
-                            maximum_tries = 30
+                            maximum_tries = 15
                             best_encoder_value = self.linear_encoder_value
 
                             while not piece_placed and try_number < maximum_tries:
@@ -2146,8 +2155,10 @@ class Ui(QMainWindow):
                         # Move UP from current position
                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
                         QApplication.processEvents()
-                        # Rotate to the best desired angle
-                        self.send_gripper_command(f"r {dst_angle + delta_angle}", blocking=True)
+                        # Rotate to the best desired angle. Do this twice to make sure it worked
+                        self.send_gripper_command(f"r {best_angle}", blocking=True)
+                        QApplication.processEvents()
+                        self.send_gripper_command(f"r {best_angle}", blocking=True)
                         QApplication.processEvents()
                         # Move to the best found location (the one with the largest encoder value)
                         wiggle_x = best_x_position
@@ -2155,9 +2166,11 @@ class Ui(QMainWindow):
                         self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{WIGGLE_Z}", blocking=True)
                         QApplication.processEvents()
 
+                # Check to see if the "scoot and wiggle" routine is enabled.
+                # If so, wiggle the piece left and right, and front and back, until it pops into place.
+                # Use small wiggles initially, followed by sequentially larger wiggles until the
+                # piece is set properly.
                 if os.path.exists("scoot_on"):
-                    # At this point check to see if the piece is FULLY set. 
-                    # If not do the "scoot and wiggle" routine if specified
                     localized_fully_placed_encoder_threshold = self.get_fully_placed_encoder_threshold(dst_x, dst_y, DROPOFF_Z)
                     if self.linear_encoder_value < localized_fully_placed_encoder_threshold:
                         logging.debug(f"PIECE NOT FULLY PLACED ({self.linear_encoder_value} not > {localized_fully_placed_encoder_threshold})")
@@ -2202,12 +2215,17 @@ class Ui(QMainWindow):
                                         # Piece is now set!
                                         logging.debug("SCOOT AND WIGGLE WORKED!")
                         
-                                        # Scoot the piece back to its original destination to prevent the build-up of error
-                                        self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
-                                        QApplication.processEvents()
+                                        # # Scoot the piece back to its original destination to prevent the build-up of error
+                                        # self.send_clearcore_command(f"m {dst_x},{dst_y},{SCOOT_Z}", blocking=True)
+                                        # QApplication.processEvents()
                                 delta_x += 25
                                 delta_y += 25
                                 try_number += 1 
+             
+            # ICC XXX REDO                   
+            # # Scoot the piece up and to the left, to push it back to the registration strips
+            #self.send_clearcore_command(f"m {dst_x-400},{dst_y+400},{SCOOT_Z}", blocking=True)
+            #QApplication.processEvents()
 
             # Turn vacuum off
             logging.debug("TURNING OFF VACUUM")
@@ -2215,12 +2233,14 @@ class Ui(QMainWindow):
             QApplication.processEvents()
 
             # Lift up, then push the piece down nice and hard, just to make sure it's set
-            self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
-            self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
+            # ICC XXX UNCOMMENT ALL THREE LINES
+            #self.send_clearcore_command(f"m {dst_x-400},{dst_y+400},{SAFE_TRAVEL_Z}", blocking=True)
+            #self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
+            #self.send_clearcore_command(f"m {dst_x},{dst_y},{DROPOFF_Z}", blocking=True)
 
             # Move to a safe travel Z
             logging.debug("MOVING TO A SAFE TRAVEL Z")
-            self.send_clearcore_command(f"m {wiggle_x},{wiggle_y},{SAFE_TRAVEL_Z}", blocking=True)
+            self.send_clearcore_command(f"m {dst_x},{dst_y},{SAFE_TRAVEL_Z}", blocking=True)
             QApplication.processEvents()
 
 def sigint_handler(*args):
