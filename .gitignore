@@ -166,3 +166,27 @@ cython_debug/
 
 # VSCode
 .vscode/
+
+# IDEs
+.idea/
+
+# Local config overrides
+config.local.toml
+*.local.toml
+
+# Runtime artifacts
+*.log
+*.pid
+
+# Generated data (keep directory structure via .gitkeep)
+data/demo_photos/*
+data/serpentine_photos/*
+data/solver/*
+data/calibration/
+!data/**/.gitkeep
+
+# Compiled solver native artifacts
+solver_library/src/c/find_islands
+
+# Ruff / lint caches
+.ruff_cache/

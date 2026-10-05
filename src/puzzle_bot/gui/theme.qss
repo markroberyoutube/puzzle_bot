@@ -1,0 +1,174 @@
+/* Puzzle Bot — dark theme */
+
+QWidget {
+    background-color: #1b1d23;
+    color: #d7dae0;
+    font-family: "Segoe UI", "DejaVu Sans", sans-serif;
+    font-size: 11pt;
+}
+
+QMainWindow::separator {
+    background: #2c2f3a;
+    width: 2px;
+    height: 2px;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #33363f;
+    border-radius: 6px;
+    top: -1px;
+    background: #1b1d23;
+}
+QTabBar::tab {
+    background: #23252d;
+    color: #9aa0ab;
+    padding: 8px 18px;
+    margin: 4px 2px 0 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border: 1px solid #33363f;
+    border-bottom: none;
+}
+QTabBar::tab:selected {
+    background: #2e3444;
+    color: #ffffff;
+    border-color: #4f8cff;
+}
+QTabBar::tab:hover:!selected {
+    background: #2a2d38;
+    color: #d7dae0;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #2e3444;
+    color: #e6e8ee;
+    border: 1px solid #3d4254;
+    border-radius: 6px;
+    padding: 6px 14px;
+    min-height: 18px;
+}
+QPushButton:hover {
+    background-color: #38405a;
+    border-color: #4f8cff;
+}
+QPushButton:pressed {
+    background-color: #4f8cff;
+    color: #ffffff;
+}
+QPushButton:disabled {
+    background-color: #23252d;
+    color: #5c616c;
+    border-color: #2c2f3a;
+}
+
+/* Inputs */
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+    background-color: #14151a;
+    border: 1px solid #33363f;
+    border-radius: 5px;
+    padding: 4px 8px;
+    selection-background-color: #4f8cff;
+}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+    border-color: #4f8cff;
+}
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    width: 16px;
+    border: none;
+    background: #23252d;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
+    background: #38405a;
+}
+
+/* Text areas */
+QTextEdit, QTextBrowser, QPlainTextEdit {
+    background-color: #14151a;
+    border: 1px solid #33363f;
+    border-radius: 6px;
+    padding: 6px;
+    font-family: "Cascadia Code", "DejaVu Sans Mono", monospace;
+    font-size: 10pt;
+}
+
+/* Labels */
+QLabel {
+    color: #d7dae0;
+    background: transparent;
+}
+QLabel[frameShape="4"], QLabel[frameShape="5"] {
+    background-color: #14151a;
+    border: 1px solid #33363f;
+    border-radius: 6px;
+}
+
+/* Group boxes */
+QGroupBox {
+    border: 1px solid #33363f;
+    border-radius: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    font-weight: bold;
+    color: #9db4dd;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    background: #1b1d23;
+    width: 12px;
+    margin: 0;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical {
+    background: #3d4254;
+    min-height: 30px;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #4f8cff;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: #1b1d23;
+    height: 12px;
+    border-radius: 6px;
+}
+QScrollBar::handle:horizontal {
+    background: #3d4254;
+    min-width: 30px;
+    border-radius: 6px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #4f8cff;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* Status bar */
+QStatusBar {
+    background: #14151a;
+    color: #9aa0ab;
+    border-top: 1px solid #33363f;
+}
+
+/* Tooltips */
+QToolTip {
+    background-color: #2e3444;
+    color: #e6e8ee;
+    border: 1px solid #4f8cff;
+    padding: 4px 8px;
+    border-radius: 4px;
+}

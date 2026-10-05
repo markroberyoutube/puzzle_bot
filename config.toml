@@ -1,0 +1,126 @@
+# Puzzle Bot configuration.
+#
+# Everything the application needs lives in this file. Values changed through
+# the GUI are written back into the [ui] table automatically (comments are kept,
+# directories are stored relative to the repository root).
+
+[app]
+title = "JIGSAW"
+
+# ---------------------------------------------------------------------------
+# Serial devices (matched by USB VID:PID, see `puzzle-bot` -> `status`)
+# ---------------------------------------------------------------------------
+
+[serial.clearcore]
+# Teknic ClearCore motion controller (XYZ gantry + vacuum)
+port_id = "VID:PID=2890:8022"
+baud_rate = 9600
+
+[serial.gripper]
+# Arduino Due gripper controller (rotation, encoder, eyes, LEDs)
+port_id = "VID:PID=2341:003D"
+baud_rate = 9600
+
+[serial.dummy_clearcore]
+# Optional: Arduino Uno running Arduino/Dummy-MotionController
+port_id = "VID:PID=2341:0043"
+baud_rate = 9600
+
+# ---------------------------------------------------------------------------
+# File locations (relative paths resolve against the repo root)
+# ---------------------------------------------------------------------------
+
+[paths]
+# Measured height of the assembly table used by the wiggle routines
+table_height_map = "data/solution_table_height.csv"
+# Directory holding marker files that enable routines: spiral_on, grid_on, scoot_on
+feature_flags_dir = "flags"
+
+# ---------------------------------------------------------------------------
+# Robot mechanics (all values in motor counts / encoder counts)
+# ---------------------------------------------------------------------------
+
+[robot]
+encoder_fully_extended = 5150
+minimum_piece_thickness_encoder_counts = 1400
+encoder_counts_per_z_motor_count = 0.93357142857
+max_rotation_motor_counts = 65536
+rotation_motor_counts_per_degree = 182
+safe_travel_z = 15000
+dropoff_z = 7000
+pickup_z = 7000
+scoot_z = 8600
+wiggle_z = 10000
+camera_z = 136000
+input_image_width = 4000
+solution_motor_origin = [78285, 308000]
+table_height_map_measurement_z = 6000
+# Gripper "eye" servo: neutral angle and offset when pointing in the travel direction
+neutral_eye_angle = 90
+eye_travel_offset = 60
+
+# ---------------------------------------------------------------------------
+# Demo mode (simulated hardware)
+# ---------------------------------------------------------------------------
+
+[demo]
+# Photos served by the fake camera; mock photos are generated when empty
+photos_dir = "data/demo_photos"
+# Simulated serial response latency
+response_delay_ms = 200
+# Auto-create the directories configured in [ui] when missing
+auto_create_dirs = true
+
+# ---------------------------------------------------------------------------
+# UI state - persisted automatically by the GUI
+# ---------------------------------------------------------------------------
+
+[ui]
+serpentine_photo_directory = "data/serpentine_photos"
+solver_directory = "data/solver"
+camera_calibration_photo_directory = "data/calibration/camera"
+gripper_calibration_photo_directory = "data/calibration/gripper"
+perspective_calibration_photo_directory = "data/calibration/perspective"
+start_x = "50000"
+start_y = "335610"
+start_z = "136000"
+end_x = "391420"
+end_y = "597130"
+end_z = "136000"
+max_step_size_x = "9899"
+max_step_size_y = "4537"
+camera_calibration_checker_rows = 15
+camera_calibration_checker_columns = 24
+camera_calibration_checker_width = "5.0"
+camera_calibration_checker_height = "5.0"
+pre_camera_calibration_image = ""
+post_camera_calibration_image = ""
+camera_fx = "13815.94625"
+camera_fy = "13815.94625"
+camera_cx = "1997.82976"
+camera_cy = "1570.20242"
+camera_k1 = "0.27549"
+camera_k2 = "-2.26908"
+camera_k3 = "0"
+camera_p1 = "0.00023"
+camera_p2 = "0.00480"
+perspective_calibration_start_x = "192326"
+perspective_calibration_start_y = "263849"
+perspective_calibration_end_x = "207000"
+perspective_rotation_angle = "0.34659021874577106"
+perspective_starting_quad = "[[1003.619140625, 533.9644775390625], [3836.06884765625, 530.647705078125], [3843.420654296875, 2204.704345703125], [1005.7055053710938, 2212.9853515625]]"
+perspective_corrected_quad = "[[1003.619140625, 533.9644775390625], [3836.06884765625, 530.647705078125], [3838.02880859375, 2204.367919921875], [1005.5790405273438, 2207.684814453125]]"
+gripper_calibration_start_x = "128000"
+gripper_calibration_start_y = "254000"
+camera_delta_x = "122000"
+camera_delta_y = "250000"
+gripper_delta_x = "86858"
+gripper_delta_y = "246000"
+gripper_calibration_angle = "5460"
+gripper_calibration_pickup_z = "5000"
+gripper_calibration_spin_z = "15000"
+motor_counts_x_per_px_x = "-9.9686"
+motor_counts_y_per_px_y = "9.9686"
+camera_to_gripper_x_transform = "-59072.3980333"
+camera_to_gripper_y_transform = "10974.9595667"
+camera_to_gripper_angle_transform = ""

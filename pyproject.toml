@@ -1,0 +1,60 @@
+[project]
+name = "puzzle-bot"
+version = "2.0.0"
+description = "Robot control application that solves jigsaw puzzles (ClearCore gantry + Android camera + solver)"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+license = "MIT"
+dependencies = [
+    "argenta>=1.2",
+    "PyQt5>=5.15",
+    "opencv-python>=4.8",
+    "numpy>=1.26",
+    "pyserial>=3.5",
+    "exif>=1.6",
+    "Pillow>=10.0",
+    "shapely>=2.0",
+    "scipy>=1.11",
+    "tomlkit>=0.13",
+]
+
+[project.scripts]
+puzzle-bot = "puzzle_bot.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["solver_library"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B", "SIM", "RUF", "PL", "N"]
+ignore = [
+    "E501",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "PLR0917",  # Qt slots take positional signal arguments
+    "N802",  # Qt overrides such as closeEvent
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["puzzle_bot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+exclude-newer = "7 days"
